@@ -234,7 +234,17 @@ async function copyReport() {
 }
 
 /* ---------- 항상 위 미니 창 (크롬·엣지 Document Picture-in-Picture) ---------- */
+const host = window.chrome && window.chrome.webview;   // PC 앱(ActionItem.exe) 안에서 실행 중이면 존재
+if (host) {
+  host.addEventListener('message', e => {
+    if (e.data === 'focus') $('quick').focus();
+    else if (e.data && 'pinned' in e.data) $('pinBtn').textContent = e.data.pinned ? '고정 해제' : '고정';
+  });
+  host.postMessage('hello');
+}
+
 async function togglePin() {
+  if (host) { host.postMessage('togglePin'); return; }   // PC 앱: 실제 창을 항상 위로
   if (pipWin) { pipWin.close(); return; }
   if (!('documentPictureInPicture' in window)) return toast('크롬 또는 엣지 최신 버전에서만 됩니다');
   pipWin = await documentPictureInPicture.requestWindow({ width: 400, height: 640 });
@@ -297,6 +307,6 @@ setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); } },
 setInterval(() => { if (pending && !busy) render(); }, 300);
 
 // 미니 창을 지원하지 않는 브라우저(폰 등)에서는 고정 버튼 숨김
-if (!('documentPictureInPicture' in window)) $('pinBtn').hidden = true;
+if (!host && !('documentPictureInPicture' in window)) $('pinBtn').hidden = true;
 
 if (code && CODE_RE.test(code)) start(); else showLogin();
