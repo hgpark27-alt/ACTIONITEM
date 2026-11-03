@@ -117,6 +117,17 @@ export function groupByDate(items) {
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// 전체 데이터 내보내기 (엑셀에서 열리는 CSV)
+export function toCSV(items) {
+  const cell = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  const day = t => (t ? ymd(new Date(t)) : '');
+  const rows = [['구분', '날짜', '분류', '할 일', '완료', '변경표시', '완료일', '생성일']];
+  const sorted = [...items].sort((a, b) => (!!a.memo - !!b.memo) || (a.date || '9').localeCompare(b.date || '9') || (a.order ?? 0) - (b.order ?? 0));
+  for (const i of sorted)
+    rows.push([i.memo ? '메모' : '액션', i.date || '', i.category || '', i.title, i.done ? 'Y' : '', i.changed ? 'Y' : '', i.done ? day(i.doneAt) : '', day(i.createdAt)]);
+  return rows.map(r => r.map(cell).join(',')).join('\r\n');
+}
+
 // 업무보고 형식: 텍스트(메모장/메신저용) + HTML(메일용, 변경은 빨강, 완료는 빨강 취소선)
 // 번호: 날짜 칸은 날짜가 바뀌어도 1, 2, 3… 이어서 / Pending은 1부터 다시
 export function buildReport(items, today) {

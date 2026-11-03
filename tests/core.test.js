@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -150,4 +150,15 @@ test('보고서: 변경 표시(changed)된 항목은 빨간 글씨, 완료는 �
   const { html } = buildReport(items, TODAY);
   assert.match(html, /<p style="margin:0;color:#d00000">1\. IGS &gt; 신규 PO 확인<\/p>/);
   assert.match(html, /<p style="margin:0">2\. 그대로<\/p>/);
+});
+test('내보내기 CSV: 머리줄 + 항목, 쉼표·따옴표·줄바꿈 처리, 메모/액션 구분', () => {
+  const items = [
+    { category: 'Valicy > LED', title: 'PT "초안", 작성', date: '2026-11-03', done: true, changed: true, order: 0,
+      createdAt: Date.parse('2026-11-01T09:00:00'), doneAt: Date.parse('2026-11-03T10:00:00') },
+    { category: '', title: '메모', memo: true, done: false, order: 0, createdAt: Date.parse('2026-11-02T09:00:00') },
+  ];
+  assert.equal(toCSV(items),
+    '구분,날짜,분류,할 일,완료,변경표시,완료일,생성일\r\n' +
+    '액션,2026-11-03,Valicy > LED,"PT ""초안"", 작성",Y,Y,2026-11-03,2026-11-01\r\n' +
+    '메모,,,메모,,,,2026-11-02');
 });

@@ -116,12 +116,31 @@ class MainForm : Form
         string msg;
         try { msg = e.TryGetWebMessageAsString(); } catch { return; }
         if (msg == "togglePin") { TopMost = !TopMost; SaveState(); }
-        if (msg == "togglePin" || msg == "hello") SendPinState();
+        if (msg == "autostart:on") SetAutostart(true);
+        if (msg == "autostart:off") SetAutostart(false);
+        SendPinState();
     }
 
     void SendPinState()
     {
-        web.CoreWebView2.PostWebMessageAsJson("{\"pinned\":" + (TopMost ? "true" : "false") + "}");
+        web.CoreWebView2.PostWebMessageAsJson("{\"pinned\":" + (TopMost ? "true" : "false") +
+            ",\"autostart\":" + (GetAutostart() ? "true" : "false") + "}");
+    }
+
+    // Windows 시작 시 자동 실행: 현재 사용자 레지스트리 Run 항목
+    const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    static bool GetAutostart()
+    {
+        using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey))
+            return k != null && k.GetValue("ActionItem") != null;
+    }
+    static void SetAutostart(bool on)
+    {
+        using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey))
+        {
+            if (on) k.SetValue("ActionItem", "\"" + Application.ExecutablePath + "\"");
+            else k.DeleteValue("ActionItem", false);
+        }
     }
 
     // Ctrl+Alt+Space: 창 불러오기 / 내리기

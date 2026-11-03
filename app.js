@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -195,15 +195,25 @@ function editRow(li) {
 }
 
 /* ---------- 팝업 (분류 / 계정) — 누른 아이콘 바로 옆에 뜸 ---------- */
+let popAnchor = null;
 function openPop(anchor, html, bind) {
   const pop = $('pop');
+  if (!pop.hidden && popAnchor === anchor) return closePop();   // 같은 버튼 다시 누르면 닫기
+  popAnchor = anchor;
   pop.innerHTML = html; pop.hidden = false;
   const a = anchor.getBoundingClientRect(), base = app.getBoundingClientRect();
   pop.style.top = (a.bottom - base.top + 4) + 'px';
   pop.style.left = Math.max(0, Math.min(a.right - base.left - pop.offsetWidth, base.width - pop.offsetWidth)) + 'px';
   bind(pop);
 }
-const closePop = () => { $('pop').hidden = true; };
+const closePop = () => { $('pop').hidden = true; popAnchor = null; };
+// 팝업(설정·분류·계정) 밖 어디를 눌러도 닫힘 — 앱 바깥 여백 포함
+function closePopOutside(e) {
+  if ($('pop').hidden) return;
+  if (e.target.closest && (e.target.closest('#pop') || (popAnchor && popAnchor.contains(e.target)))) return;
+  closePop();
+}
+document.addEventListener('pointerdown', closePopOutside);
 
 // 분류: 직접 입력(">"로 단계) 또는 목록에서 고르기, ✎로 이름 변경(하위 분류·모든 항목 함께)
 function catPop(btn, it) {
@@ -241,12 +251,45 @@ function catPop(btn, it) {
     });
   });
 }
+/* ---------- 설정 (톱니바퀴) ---------- */
+const theme = () => localStorage.getItem('ai-theme') || 'light';
+function applyTheme() {
+  [document, pipWin && pipWin.document].forEach(d => { if (d) d.documentElement.dataset.theme = theme(); });
+}
+function setPop(btn) {
+  const on = v => `<span class="ck">${v ? '✓' : ''}</span>`;
+  openPop(btn, `
+    <button data-s="export">${on(false)}데이터 내보내기 (엑셀)</button>
+    <button data-s="dark">${on(theme() === 'dark')}다크 모드</button>
+    ${host ? `<button data-s="auto">${on(autostart)}Windows 시작 시 자동 실행</button>` : ''}
+    <div class="sep"></div>
+    <button data-s="out">${on(false)}로그아웃 <small>${esc(name)}</small></button>`, pop => {
+    pop.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+      const s = b.dataset.s;
+      closePop();
+      if (s === 'export') exportCSV();
+      if (s === 'dark') { localStorage.setItem('ai-theme', theme() === 'dark' ? 'light' : 'dark'); applyTheme(); }
+      if (s === 'auto') { host.postMessage(autostart ? 'autostart:off' : 'autostart:on'); toast(autostart ? '자동 실행 끔' : '자동 실행 켬'); }
+      if (s === 'out') logout();
+    });
+  });
+}
+function exportCSV() {
+  const blob = new Blob(['\uFEFF' + toCSV(items)], { type: 'text/csv;charset=utf-8' });   // BOM: 엑셀 한글 깨짐 방지
+  const a = app.ownerDocument.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ActionItems_${today()}.csv`;
+  app.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function logout() {
+  localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
+  if (unsub) { unsub(); unsub = null; } items = []; showLogin();
+}
+
 function acctPop(btn) {
   openPop(btn, `<div class="code">${esc(name)}</div><button data-a="out">로그아웃</button>`, pop => {
-    pop.querySelector('[data-a=out]').onclick = () => {
-      closePop(); localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
-      if (unsub) { unsub(); unsub = null; } items = []; showLogin();
-    };
+    pop.querySelector('[data-a=out]').onclick = () => { closePop(); logout(); };
   });
 }
 
@@ -346,10 +389,11 @@ async function copyReport() {
 /* ---------- 항상 위(핀): PC 앱이면 실제 창, 브라우저면 미니 창 ---------- */
 const setPinned = on => $('pinBtn').classList.toggle('on', on);
 const host = window.chrome && window.chrome.webview;   // PC 앱(ActionItem.exe) 안에서 실행 중이면 존재
+let autostart = false;
 if (host) {
   host.addEventListener('message', e => {
     if (e.data === 'focus') $('quick').focus();
-    else if (e.data && 'pinned' in e.data) setPinned(e.data.pinned);
+    else if (e.data && 'pinned' in e.data) { setPinned(e.data.pinned); autostart = !!e.data.autostart; }
   });
   host.postMessage('hello');
 }
@@ -364,6 +408,8 @@ async function togglePin() {
   document.querySelectorAll('link[rel=stylesheet]').forEach(l => d.head.append(l.cloneNode(true)));
   d.body.append(app);
   d.addEventListener('keydown', onUndoKey);
+  d.addEventListener('pointerdown', closePopOutside);
+  applyTheme();
   setPinned(true);
   document.getElementById('pipNote').hidden = false;
   pipWin.addEventListener('pagehide', () => {
@@ -391,7 +437,7 @@ function toast(msg, action, onAction) {
 /* ---------- 이벤트 (모두 #app에 걸어서 미니 창으로 옮겨도 동작) ---------- */
 app.addEventListener('click', e => {
   const t = e.target;
-  if (!t.closest('#pop') && !t.closest('[data-a=cat]') && !t.closest('#acctBtn')) closePop();
+  if (t.closest('#setBtn')) return setPop(t.closest('#setBtn'));
   if (t.id === 'nameEnter') return enter($('nameInput').value);
   if (t.id === 'copyBtn') return copyReport();
   if (t.closest('#pinBtn')) return togglePin();
@@ -447,5 +493,9 @@ setInterval(() => { if (pending && !busy) render(); }, 300);
 
 // 미니 창을 지원하지 않는 브라우저(폰 등)에서는 핀 버튼 숨김
 if (!host && !('documentPictureInPicture' in window)) $('pinBtn').hidden = true;
+
+applyTheme();
+// 이름(로그인) 정보를 브라우저가 공간 정리 때 지우지 않도록 "보관 유지" 요청 (지원 브라우저만)
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 
 if (key && name) start(); else showLogin();
