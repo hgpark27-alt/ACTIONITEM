@@ -119,6 +119,13 @@ header { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
 #toast[hidden] { display: none; }
 #pipNote { text-align: center; color: var(--muted); margin-top: 80px; }
 
+/* 폰·태블릿 (마우스 올리기 없음) → 버튼 항상 표시 */
+@media (hover: none) {
+  .grip, .act { visibility: visible; }
+  .act button { padding: 0 8px; }
+  #search { font-size: 16px; }
+}
+
 /* 미니 창(폭 좁음) */
 @media (max-width: 460px) {
   #app { padding: 12px 10px 40px; }

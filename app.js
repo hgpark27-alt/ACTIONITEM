@@ -296,4 +296,7 @@ setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); } },
 // 편집·드래그 중 미뤄둔 화면 갱신 처리
 setInterval(() => { if (pending && !busy) render(); }, 300);
 
+// 미니 창을 지원하지 않는 브라우저(폰 등)에서는 고정 버튼 숨김
+if (!('documentPictureInPicture' in window)) $('pinBtn').hidden = true;
+
 if (code && CODE_RE.test(code)) start(); else showLogin();
