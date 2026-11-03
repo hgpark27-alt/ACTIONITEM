@@ -11,6 +11,7 @@ const today = () => ymd(new Date());
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 
 const CAL = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>';
+const DEL = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
 const TAG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8.6 1.8H13a1.2 1.2 0 0 1 1.2 1.2v4.4L7.6 14a1.2 1.2 0 0 1-1.7 0L2 10.1a1.2 1.2 0 0 1 0-1.7z"/><circle cx="10.8" cy="5.2" r="1"/></svg>';
 
 let key = localStorage.getItem('ai-key');
@@ -153,7 +154,7 @@ function row(i) {
     <span class="act">
       <button data-a="cat" title="분류">${TAG}</button>
       <label class="calbtn" title="날짜">${CAL}<input type="date" data-a="date" value="${i.date || ''}"></label>
-      <button data-a="del" title="삭제">✕</button>
+      <button data-a="del" title="삭제">${DEL}</button>
     </span>
     <button class="mark" title="변경 표시"></button>
   </li>`;

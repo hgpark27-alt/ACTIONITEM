@@ -74,10 +74,10 @@ test('보고서: 업무보고 형식 텍스트 + 완료는 빨강 취소선 HTML
   ];
   const r = buildReport(items, TODAY);
   assert.equal(r.text,
-    '[11월 3일]\n27년 1Q 매출 작성\nFBM > LED점등 불량 <update>\n\n' +
-    '[11월 4일]\nValicy > LED Signage > Weekly meeting 진행\n\n' +
-    '[Pending 업무]\nValicy > Tariff Refund Invoice 입수');
-  assert.match(r.html, /<li style="color:#d00000;text-decoration:line-through">FBM &gt; LED점등 불량 &lt;update&gt;<\/li>/);
+    '[11월 3일]\n1. 27년 1Q 매출 작성\n2. FBM > LED점등 불량 <update>\n\n' +
+    '[11월 4일]\n3. Valicy > LED Signage > Weekly meeting 진행\n\n' +
+    '[Pending 업무]\n1. Valicy > Tariff Refund Invoice 입수');
+  assert.match(r.html, /<p style="margin:0;color:#d00000;text-decoration:line-through">2\. FBM &gt; LED점등 불량 &lt;update&gt;<\/p>/);
   assert.match(r.html, /<p><b>\[Pending 업무\]<\/b><\/p>/);
 });
 
@@ -109,7 +109,7 @@ test('보고서: 메모는 빠짐', () => {
     { id: '1', category: '', title: '메모 항목', date: null, memo: true, done: false, order: 0 },
     { id: '2', category: '', title: '액션', date: '2026-11-03', done: false, order: 0 },
   ];
-  assert.equal(buildReport(items, TODAY).text, '[11월 3일]\n액션');
+  assert.equal(buildReport(items, TODAY).text, '[11월 3일]\n1. 액션');
 });
 
 test('분류 트리: 상위 단계 자동 포함, 단계별 정렬, 깊이 표시', () => {
@@ -148,6 +148,6 @@ test('보고서: 변경 표시(changed)된 항목은 빨간 글씨, 완료는 �
     { id: '2', category: '', title: '그대로', date: '2026-11-03', done: false, order: 1 },
   ];
   const { html } = buildReport(items, TODAY);
-  assert.match(html, /<li style="color:#d00000">IGS &gt; 신규 PO 확인<\/li>/);
-  assert.match(html, /<li>그대로<\/li>/);
+  assert.match(html, /<p style="margin:0;color:#d00000">1\. IGS &gt; 신규 PO 확인<\/p>/);
+  assert.match(html, /<p style="margin:0">2\. 그대로<\/p>/);
 });

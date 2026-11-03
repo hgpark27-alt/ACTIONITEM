@@ -208,11 +208,33 @@ button.icon:hover { color: var(--ink); }
 #pipNote { text-align: center; color: var(--muted); margin-top: 80px; }
 
 /* 폰·태블릿 (마우스 올리기 없음) → 버튼 항상 표시 */
-@media (hover: none) {
+/* 폰·태블릿(터치): 버튼 항상 표시 + 전체 약 12~15% 크게 */
+@media (hover: none), (pointer: coarse) {
   .act { visibility: visible; position: static; background: none; padding-left: 0; }
-  .act button { padding: 0 8px; }
-  #quick { font-size: 16px; }   /* 아이폰에서 입력 시 화면 확대 방지 */
-  .chip { padding: 5px 12px; }
+  .calbtn, .act button { padding: 0 4px; }
+  .act svg { width: 16px; height: 16px; margin-top: 3px; }
+
+  body, input, button { font-size: 16px; }
+  #quick { font-size: 16px; padding: 11px 14px; }   /* 16px 이상이어야 아이폰에서 입력 시 화면 확대 안 됨 */
+  .brand { font-size: 17px; }
+  button.icon svg { width: 18px; height: 18px; }
+  #memoZone h3 { font-size: 13.5px; }
+  #actionZone > h3 { font-size: 16px; }
+  .group h2 { font-size: 14.5px; }
+  .group h2 .cnt { font-size: 13.5px; }
+  .group h2 .tag { font-size: 12.5px; }
+
+  .item { padding: 7px 4px; gap: 10px; }
+  .txt { line-height: 23px; }
+  .seg { font-size: 13.5px; line-height: 19px; padding: 0 7px; }
+  .chk { width: 15px; height: 15px; margin-top: 4px; }
+  .item.done .chk::after { font-size: 11px; line-height: 12px; }
+  .mark { width: 22px; height: 23px; }
+  .mark::after { left: 6px; top: 7px; width: 9px; height: 9px; }
+
+  .chip { font-size: 14.5px; padding: 5px 12px; }
+  #toast { font-size: 14.5px; }
+  #toast button { font-size: 14.5px; }
 }
 
 /* 좁은 창 */

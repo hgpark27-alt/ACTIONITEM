@@ -117,19 +117,21 @@ export function groupByDate(items) {
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// 업무보고 형식: 텍스트(메모장/메신저용) + HTML(메일용, 완료는 빨강 취소선)
+// 업무보고 형식: 텍스트(메모장/메신저용) + HTML(메일용, 변경은 빨강, 완료는 빨강 취소선)
+// 번호: 날짜 칸은 날짜가 바뀌어도 1, 2, 3… 이어서 / Pending은 1부터 다시
 export function buildReport(items, today) {
   const groups = groupByDate(visibleItems(items.filter(i => !i.memo), today));
   const text = [], html = [];
+  let n = 0;
   for (const g of groups) {
+    if (!g.date) n = 0;
     const head = g.date ? `[${dateLabel(g.date)}]` : '[Pending 업무]';
-    text.push([head, ...g.items.map(fullTitle)].join('\n'));
-    html.push(`<p><b>${esc(head)}</b></p><ul>` + g.items.map(it =>
-      it.done
-        ? `<li style="color:#d00000;text-decoration:line-through">${esc(fullTitle(it))}</li>`
-        : it.changed
-          ? `<li style="color:#d00000">${esc(fullTitle(it))}</li>`
-          : `<li>${esc(fullTitle(it))}</li>`).join('') + '</ul>');
+    const lines = g.items.map(it => ({ it, line: `${++n}. ${fullTitle(it)}` }));
+    text.push([head, ...lines.map(l => l.line)].join('\n'));
+    html.push(`<p><b>${esc(head)}</b></p>` + lines.map(({ it, line }) => {
+      const st = it.done ? ';color:#d00000;text-decoration:line-through' : it.changed ? ';color:#d00000' : '';
+      return `<p style="margin:0${st}">${esc(line)}</p>`;
+    }).join('') + '<p>&nbsp;</p>');
   }
   return { text: text.join('\n\n'), html: html.join('') };
 }
