@@ -42,6 +42,57 @@ export function parseQuickInput(text, today) {
   return { category: parts.join(' > '), title, date };
 }
 
+// 이름 → 저장 위치 열쇠 (같은 이름이면 어느 기기에서든 같은 열쇠)
+export const normalizeName = s => s.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+export async function nameToKey(name) {
+  const buf = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode('actionitem:' + normalizeName(name)));
+  return 'n' + [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+}
+
+
+const byRecent = (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+const uniq = arr => [...new Set(arr)];
+
+// 카테고리 칩: 최근에 쓴 순서
+export const categoryList = items =>
+  uniq([...items].sort(byRecent).map(i => i.category).filter(Boolean));
+
+// 분류 단어 → 고유 색상(hue 0~359). 같은 단어는 어느 기기에서든 같은 색
+export function catHue(word) {
+  let h = 2166136261;
+  for (const ch of word.trim()) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
+  return (h >>> 0) % 360;
+}
+
+// "A > B > C" 경로 정리 (공백·빈 단계 제거)
+export const cleanPath = s => (s || '').split('>').map(x => x.trim()).filter(Boolean).join(' > ');
+
+// 분류 트리: 상위 단계도 포함해 단계별로 정렬
+export function categoryTree(items) {
+  const paths = new Set();
+  for (const it of items) {
+    const parts = cleanPath(it.category).split(' > ').filter(Boolean);
+    parts.forEach((_, i) => paths.add(parts.slice(0, i + 1).join(' > ')));
+  }
+  return [...paths]
+    .sort((a, b) => { const x = a.split(' > '), y = b.split(' > ');
+      for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i].localeCompare(y[i]);
+      return x.length - y.length; })
+    .map(path => { const parts = path.split(' > '); return { path, name: parts.at(-1), depth: parts.length - 1 }; });
+}
+
+// 분류 이름 변경: 자기 자신 + 하위 분류를 쓰는 항목 → {id: 새 분류}
+export function renameCategory(items, from, to) {
+  to = cleanPath(to);
+  const out = {};
+  for (const it of items) {
+    const c = it.category || '';
+    if (c === from) out[it.id] = to;
+    else if (c.startsWith(from + ' > ')) out[it.id] = cleanPath(to + c.slice(from.length));
+  }
+  return out;
+}
+
 export const dateLabel = s => { const d = parseYmd(s); return `${d.getMonth() + 1}월 ${d.getDate()}일`; };
 export const fullTitle = it => (it.category ? `${it.category} > ` : '') + it.title;
 
@@ -68,7 +119,7 @@ const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&
 
 // 업무보고 형식: 텍스트(메모장/메신저용) + HTML(메일용, 완료는 빨강 취소선)
 export function buildReport(items, today) {
-  const groups = groupByDate(visibleItems(items, today));
+  const groups = groupByDate(visibleItems(items.filter(i => !i.memo), today));
   const text = [], html = [];
   for (const g of groups) {
     const head = g.date ? `[${dateLabel(g.date)}]` : '[Pending 업무]';
@@ -76,7 +127,9 @@ export function buildReport(items, today) {
     html.push(`<p><b>${esc(head)}</b></p><ul>` + g.items.map(it =>
       it.done
         ? `<li style="color:#d00000;text-decoration:line-through">${esc(fullTitle(it))}</li>`
-        : `<li>${esc(fullTitle(it))}</li>`).join('') + '</ul>');
+        : it.changed
+          ? `<li style="color:#d00000">${esc(fullTitle(it))}</li>`
+          : `<li>${esc(fullTitle(it))}</li>`).join('') + '</ul>');
   }
   return { text: text.join('\n\n'), html: html.join('') };
 }

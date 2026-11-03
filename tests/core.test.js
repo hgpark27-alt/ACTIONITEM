@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport } from '../core.js';
+import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -78,4 +79,75 @@ test('보고서: 업무보고 형식 텍스트 + 완료는 빨강 취소선 HTML
     '[Pending 업무]\nValicy > Tariff Refund Invoice 입수');
   assert.match(r.html, /<li style="color:#d00000;text-decoration:line-through">FBM &gt; LED점등 불량 &lt;update&gt;<\/li>/);
   assert.match(r.html, /<p><b>\[Pending 업무\]<\/b><\/p>/);
+});
+
+test('이름 정규화: 앞뒤 공백·연속 공백·영문 대소문자 무시', () => {
+  assert.equal(normalizeName('  Park  HG '), 'park hg');
+  assert.equal(normalizeName('박혜근'), '박혜근');
+});
+
+test('이름 → 열쇠: 같은 이름은 항상 같은 열쇠, 다른 이름은 다른 열쇠', async () => {
+  const a = await nameToKey('박혜근');
+  assert.equal(a, await nameToKey(' 박혜근 '));
+  assert.notEqual(a, await nameToKey('박혜근2'));
+  assert.match(a, /^n[0-9a-f]{24}$/);
+});
+
+
+test('카테고리 칩: 최근에 쓴 순서, 중복·빈 값 제외', () => {
+  const items = [
+    { category: 'FBM', updatedAt: 1 },
+    { category: '', updatedAt: 9 },
+    { category: 'IGS', updatedAt: 5 },
+    { category: 'FBM', updatedAt: 7 },
+  ];
+  assert.deepEqual(categoryList(items), ['FBM', 'IGS']);
+});
+
+test('보고서: 메모는 빠짐', () => {
+  const items = [
+    { id: '1', category: '', title: '메모 항목', date: null, memo: true, done: false, order: 0 },
+    { id: '2', category: '', title: '액션', date: '2026-11-03', done: false, order: 0 },
+  ];
+  assert.equal(buildReport(items, TODAY).text, '[11월 3일]\n액션');
+});
+
+test('분류 트리: 상위 단계 자동 포함, 단계별 정렬, 깊이 표시', () => {
+  const items = [{ category: 'Valicy > Pillar cabinet' }, { category: 'FBM' }, { category: 'Valicy > LED Signage > Teton' }, { category: '' }];
+  assert.deepEqual(categoryTree(items), [
+    { path: 'FBM', name: 'FBM', depth: 0 },
+    { path: 'Valicy', name: 'Valicy', depth: 0 },
+    { path: 'Valicy > LED Signage', name: 'LED Signage', depth: 1 },
+    { path: 'Valicy > LED Signage > Teton', name: 'Teton', depth: 2 },
+    { path: 'Valicy > Pillar cabinet', name: 'Pillar cabinet', depth: 1 },
+  ]);
+});
+
+test('분류 이름 변경: 자기 자신과 하위 분류만 바뀜', () => {
+  const items = [
+    { id: 'a', category: 'Valicy' },
+    { id: 'b', category: 'Valicy > LED Signage' },
+    { id: 'c', category: 'Valicy2' },
+    { id: 'd', category: 'FBM' },
+  ];
+  assert.deepEqual(renameCategory(items, 'Valicy', '고객 > Valicy'), { a: '고객 > Valicy', b: '고객 > Valicy > LED Signage' });
+  assert.deepEqual(renameCategory(items, 'FBM', ' FBM >  RMA '), { d: 'FBM > RMA' });
+});
+test('분류 색: 같은 단어는 항상 같은 색, 0~359 범위, 단어마다 다름', () => {
+  assert.equal(catHue('Valicy'), catHue('Valicy'));
+  assert.equal(catHue(' Valicy '), catHue('Valicy'));
+  assert.notEqual(catHue('Valicy'), catHue('Pillar cabinet'));
+  for (const w of ['Valicy', 'FBM', 'IGS', '고객', 'LED Signage']) {
+    const h = catHue(w);
+    assert.ok(Number.isInteger(h) && h >= 0 && h < 360, `${w} → ${h}`);
+  }
+});
+test('보고서: 변경 표시(changed)된 항목은 빨간 글씨, 완료는 빨간 취소선', () => {
+  const items = [
+    { id: '1', category: 'IGS', title: '신규 PO 확인', date: '2026-11-03', done: false, changed: true, order: 0 },
+    { id: '2', category: '', title: '그대로', date: '2026-11-03', done: false, order: 1 },
+  ];
+  const { html } = buildReport(items, TODAY);
+  assert.match(html, /<li style="color:#d00000">IGS &gt; 신규 PO 확인<\/li>/);
+  assert.match(html, /<li>그대로<\/li>/);
 });

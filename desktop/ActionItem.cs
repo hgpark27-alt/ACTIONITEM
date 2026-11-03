@@ -85,7 +85,15 @@ class MainForm : Form
             CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(dataDir, "webview"));
             await web.EnsureCoreWebView2Async(env);
             web.CoreWebView2.WebMessageReceived += OnWebMessage;
-            web.Source = new Uri(Url);
+            // 테스트용: 실행 인자로 폴더를 주면 온라인 대신 그 폴더의 화면을 띄움
+            string[] args = Environment.GetCommandLineArgs();
+            if (args.Length > 1 && Directory.Exists(args[1]))
+            {
+                web.CoreWebView2.SetVirtualHostNameToFolderMapping("actionitem.local", args[1], CoreWebView2HostResourceAccessKind.Allow);
+                Text = "Action Items (테스트)";
+                web.Source = new Uri("https://actionitem.local/index.html");
+            }
+            else web.Source = new Uri(Url);
         }
         catch (Exception ex)
         {

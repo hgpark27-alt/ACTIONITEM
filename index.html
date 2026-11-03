@@ -14,29 +14,35 @@
     <div id="app">
       <section id="login" hidden>
         <h1>Action Items</h1>
-        <p>계정 코드를 입력하세요. 처음이면 <b>새 코드 만들기</b>를 누르세요.<br>
-           다른 PC에서도 같은 코드를 넣으면 같은 데이터가 보입니다.</p>
-        <input id="codeInput" placeholder="계정 코드 (8자 이상)" autocomplete="off" spellcheck="false">
-        <div class="row">
-          <button id="codeEnter" class="primary">들어가기</button>
-          <button id="codeNew">새 코드 만들기</button>
-        </div>
+        <input id="nameInput" placeholder="이름" autocomplete="off" spellcheck="false">
+        <button id="nameEnter" class="primary">시작</button>
         <p id="loginMsg" class="msg"></p>
       </section>
 
       <section id="main" hidden>
         <header>
-          <span class="brand">Action Items <i id="conn" title="연결 상태"></i></span>
-          <input id="search" placeholder="검색" autocomplete="off" spellcheck="false">
-          <button id="pinBtn" title="항상 위 미니 창">고정</button>
-          <button id="acctBtn" title="계정 코드">계정</button>
+          <button id="acctBtn" class="brand" title="계정"><span id="who"></span> <i id="conn" title="연결 상태"></i></button>
+          <button id="pinBtn" class="icon" title="항상 위"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M10.2 1.8l4 4-1.6.6-2.5 2.5-.3 3-1.3 1.3-2.9-2.9-3.2 3.2M4.4 7.3l4.3 4.3M4.4 7.3l1.3-1.3 3-.3 2.5-2.5z"/></svg></button>
           <button id="copyBtn" class="primary">보고서 복사</button>
         </header>
-        <input id="quick" autocomplete="off" spellcheck="false"
-               placeholder="Valicy > LED Signage > 할 일  11/3   ↵">
-        <p class="hint">날짜: 11/3 · 오늘 · 내일 · 모레 · 2026-11-03 &nbsp;|&nbsp; 날짜 없으면 Pending</p>
-        <div id="list"></div>
-        <button id="oldBtn" class="link"></button>
+
+        <input id="quick" autocomplete="off" spellcheck="false" placeholder="Enter">
+
+        <section id="memoZone" class="group" data-zone="memo">
+          <h3>메모 <span id="memoCnt" class="cnt"></span></h3>
+          <ul class="items" id="memoList"></ul>
+        </section>
+
+        <section id="actionZone">
+          <h3>액션 아이템</h3>
+          <div id="list"></div>
+          <button id="oldBtn" class="link"></button>
+        </section>
+
+        <!-- 끄는 동안만 화면 아래에 뜨는 놓을 곳 -->
+        <div id="chips">
+          <div class="chiprow"><span class="lbl">분류</span><span id="catChips"></span></div>
+        </div>
       </section>
       <div id="pop" hidden></div>
       <div id="toast" hidden></div>
