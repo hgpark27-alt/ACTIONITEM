@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Action Items</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="home">
+    <div id="app">
+      <section id="login" hidden>
+        <h1>Action Items</h1>
+        <p>계정 코드를 입력하세요. 처음이면 <b>새 코드 만들기</b>를 누르세요.<br>
+           다른 PC에서도 같은 코드를 넣으면 같은 데이터가 보입니다.</p>
+        <input id="codeInput" placeholder="계정 코드 (8자 이상)" autocomplete="off" spellcheck="false">
+        <div class="row">
+          <button id="codeEnter" class="primary">들어가기</button>
+          <button id="codeNew">새 코드 만들기</button>
+        </div>
+        <p id="loginMsg" class="msg"></p>
+      </section>
+
+      <section id="main" hidden>
+        <header>
+          <span class="brand">Action Items <i id="conn" title="연결 상태"></i></span>
+          <input id="search" placeholder="검색" autocomplete="off" spellcheck="false">
+          <button id="pinBtn" title="항상 위 미니 창">고정</button>
+          <button id="acctBtn" title="계정 코드">계정</button>
+          <button id="copyBtn" class="primary">보고서 복사</button>
+        </header>
+        <input id="quick" autocomplete="off" spellcheck="false"
+               placeholder="Valicy > LED Signage > 할 일  11/3   ↵">
+        <p class="hint">날짜: 11/3 · 오늘 · 내일 · 모레 · 2026-11-03 &nbsp;|&nbsp; 날짜 없으면 Pending</p>
+        <div id="list"></div>
+        <button id="oldBtn" class="link"></button>
+      </section>
+      <div id="pop" hidden></div>
+      <div id="toast" hidden></div>
+    </div>
+  </div>
+  <p id="pipNote" hidden>미니 창에서 사용 중입니다. <button id="unpin">이 창으로 돌아오기</button></p>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
