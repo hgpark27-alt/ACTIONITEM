@@ -33,7 +33,7 @@ const strip = it => { const { id, ...d } = it; return d; };
 function showLogin(msg = '') {
   $('main').hidden = true; $('login').hidden = false;
   $('loginMsg').textContent = msg;
-  if (noteOn || host) setNoteOpen(false);   // 로그인 화면에선 노트 닫음 (PC 앱 창도 원래 폭)
+  if (noteOn || drawer) setNoteOpen(false);   // 로그인 화면에선 노트 닫음 (PC 앱 창도 원래 폭)
   $('nameInput').focus();
 }
 async function enter(raw) {
@@ -400,6 +400,7 @@ async function copyReport() {
 /* ---------- 항상 위(핀): PC 앱이면 실제 창, 브라우저면 미니 창 ---------- */
 const setPinned = on => $('pinBtn').classList.toggle('on', on);
 const host = window.chrome && window.chrome.webview;   // PC 앱(ActionItem.exe) 안에서 실행 중이면 존재
+const drawer = !!(host && window.__aiStrip);             // 새 PC 앱: 노트 칸을 창 밖에 숨겨 두는 방식 지원 (옛 exe는 일반 화면처럼)
 let autostart = false;
 if (host) {
   host.addEventListener('message', e => {
@@ -455,13 +456,13 @@ function setNoteOpen(on) {
   localStorage.setItem('ai-note', on ? '1' : '0');
   app.classList.toggle('note-open', on);
   $('noteBtn').classList.toggle('on', on);
-  if (!host) { $('note').hidden = !on; return; }
+  if (!drawer) { $('note').hidden = !on; return; }
   // PC 앱: 노트는 창 밖 왼쪽 칸에 미리 그려 두고, 창 가장자리만 부드럽게 늘였다 줄임
   if (on) $('note').hidden = false;
   else setTimeout(() => { if (!noteOn) $('note').hidden = true; }, 250);   // 줄어드는 동안은 보이게
   host.postMessage(on ? 'note:open' : 'note:close');
 }
-const noteOverlay = () => !host && win().matchMedia('(max-width: 759px)').matches;   // 좁은 창: 내용 위에 덮는 방식
+const noteOverlay = () => !drawer && win().matchMedia('(max-width: 759px)').matches;   // 좁은 창: 내용 위에 덮는 방식
 // 커서가 있는 줄(또는 선택한 줄들) → 메모로 보내고 노트에서는 지움 (Ctrl+Z로 노트 글 복구 가능)
 function sendNote() {
   const ta = $('noteText'), v = ta.value;

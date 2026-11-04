@@ -89,6 +89,7 @@ class MainForm : Form
             CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(dataDir, "webview"));
             await web.EnsureCoreWebView2Async(env);
             web.CoreWebView2.WebMessageReceived += OnWebMessage;
+            await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("window.__aiStrip = 1;");   // 노트 서랍 방식 지원 알림
             // 테스트용: 실행 인자로 폴더를 주면 온라인 대신 그 폴더의 화면을 띄움
             string[] args = Environment.GetCommandLineArgs();
             if (args.Length > 1 && Directory.Exists(args[1]))
