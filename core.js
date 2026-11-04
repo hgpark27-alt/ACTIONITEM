@@ -154,11 +154,28 @@ export function noteLines(text) {
     .map(l => l.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, '').trim())
     .filter(Boolean);
 }
-// 선택(또는 커서) 위치가 걸친 줄 전체의 범위. 뒤 줄바꿈까지 포함, 마지막 줄이면 앞 줄바꿈을 포함
-export function lineRange(text, selStart, selEnd) {
-  let start = text.lastIndexOf('\n', selStart - 1) + 1;
-  let end = text.indexOf('\n', Math.max(selStart, selEnd - (selEnd > selStart && text[selEnd - 1] === '\n' ? 1 : 0)));
-  if (end === -1) { end = text.length; if (start > 0) start -= 1; }
-  else end += 1;
-  return { start, end };
+// 노트 서식: 밑줄(u)·줄(div)·줄바꿈(br)만 허용. 다른 태그는 글자만 남기고, 속성은 모두 제거
+export function cleanNoteHtml(html) {
+  return String(html)
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, m => m.replace(/<[^>]*>/g, ''))
+    .replace(/<(\/?)([a-z0-9]+)\b[^>]*>/gi, (m, close, tag) => {
+      const t = tag.toLowerCase() === 'p' ? 'div' : tag.toLowerCase();
+      if (t === 'br') return close ? '' : '<br>';
+      return t === 'u' || t === 'div' ? `<${close}${t}>` : '';
+    })
+    .replace(/<(?!\/?(?:u|div|br)>)/g, '&lt;');
+}
+// 노트 서식 → 줄글 (줄 = div, 빈 줄 = <div><br></div>)
+export function noteHtmlToText(html) {
+  return cleanNoteHtml(html)
+    .replace(/<br><\/div>/g, '</div>')
+    .replace(/<div>/g, '\n').replace(/<\/div>/g, '').replace(/<br>/g, '\n')
+    .replace(/<\/?u>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    .replace(/^\n/, '');
+}
+// 예전에 줄글로 저장된 노트 → 줄마다 div
+export function textToNoteHtml(text) {
+  const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(text).split(/\r?\n/).map(l => `<div>${l ? e(l) : '<br>'}</div>`).join('');
 }

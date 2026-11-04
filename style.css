@@ -287,11 +287,12 @@ button.icon:hover { color: var(--ink); }
 }
 #note[hidden] { display: none; }
 .notehead {
-  padding: 12px 14px 0;
+  display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 0 14px;
   font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .4px;
 }
+.notehead button.icon { border: none; }
 #noteText {
-  flex: 1; width: 100%; resize: none; border: none; outline: none; background: transparent; color: var(--ink);
+  flex: 1; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; color: var(--ink);
   font-family: inherit; font-size: 14px; line-height: 1.7; padding: 6px 14px 14px;
 }
 @media (min-width: 760px) {
@@ -317,3 +318,4 @@ html.host #note {
 @media (max-width: 776px) {
   html.host #app { padding: 12px 10px 40px; }
 }
+#noteText u { text-underline-offset: 3px; }

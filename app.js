@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, lineRange } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -294,7 +294,7 @@ function exportCSV() {
 function logout() {
   localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
   if (unsub) { unsub(); unsub = null; } items = [];
-  if (noteUnsub) { noteUnsub(); noteUnsub = null; } $('noteText').value = '';
+  if (noteUnsub) { noteUnsub(); noteUnsub = null; } $('noteText').innerHTML = '';
   showLogin();
 }
 
@@ -441,14 +441,16 @@ function startNote() {
   if (noteUnsub) noteUnsub();
   noteRef = ref(db, `u/${key}/note`);
   noteUnsub = onValue(noteRef, snap => {
-    const ta = $('noteText'), v = (snap.val() && snap.val().text) || '';
-    if (ta.ownerDocument.activeElement !== ta && !noteT && ta.value !== v) ta.value = v;
+    const el = $('noteText'), v = snap.val() || {};
+    const html = v.html != null ? cleanNoteHtml(v.html) : textToNoteHtml(v.text || '');
+    if (el.ownerDocument.activeElement !== el && !noteT && el.innerHTML !== html) el.innerHTML = html;
   });
   setNoteOpen(localStorage.getItem('ai-note') === '1');
 }
 function saveNote() {
   clearTimeout(noteT); noteT = 0;
-  if (noteRef) set(noteRef, { text: $('noteText').value, at: Date.now() });
+  const el = $('noteText');
+  if (noteRef) set(noteRef, { text: noteHtmlToText(el.innerHTML), html: cleanNoteHtml(el.innerHTML), at: Date.now() });
 }
 let noteOn = false;
 function setNoteOpen(on) {
@@ -464,14 +466,34 @@ function setNoteOpen(on) {
 }
 const noteOverlay = () => !drawer && win().matchMedia('(max-width: 759px)').matches;   // 좁은 창: 내용 위에 덮는 방식
 // 커서가 있는 줄(또는 선택한 줄들) → 메모로 보내고 노트에서는 지움 (Ctrl+Z로 노트 글 복구 가능)
+// 노트 한 줄 = div 하나. 맨 윗줄처럼 div 없이 적힌 글은 먼저 div로 감쌈
+function noteBlocks(el) {
+  let line = null;
+  [...el.childNodes].forEach(n => {
+    if (n.nodeName === 'DIV') { line = null; return; }
+    if (!line) { line = el.ownerDocument.createElement('div'); el.insertBefore(line, n); }
+    line.append(n);
+    if (n.nodeName === 'BR') line = null;
+  });
+  return [...el.children];
+}
 function sendNote() {
-  const ta = $('noteText'), v = ta.value;
-  const r = lineRange(v, ta.selectionStart, ta.selectionEnd);
-  if (!addItems(noteLines(v.slice(r.start, r.end)))) return;
-  ta.focus();
-  ta.setSelectionRange(r.start, r.end);
-  if (!ta.ownerDocument.execCommand('delete')) ta.setRangeText('');
+  const el = $('noteText'), doc = el.ownerDocument, sel = doc.getSelection();
+  if (!sel.rangeCount || !el.contains(sel.anchorNode)) return;
+  const range = sel.getRangeAt(0);
+  const blocks = noteBlocks(el).filter(b => range.intersectsNode(b));
+  if (!blocks.length || !addItems(noteLines(blocks.map(b => b.innerText).join('\n')))) return;
+  const r = doc.createRange();
+  r.setStartBefore(blocks[0]); r.setEndAfter(blocks[blocks.length - 1]);
+  sel.removeAllRanges(); sel.addRange(r);
+  doc.execCommand('delete');
   saveNote();
+}
+// 밑줄 (버튼 또는 Ctrl+U) — 노트 서식은 밑줄만
+function underlineNote() {
+  const doc = $('noteText').ownerDocument;
+  doc.execCommand('styleWithCSS', false, false);
+  doc.execCommand('underline');
 }
 // 노트에서 글을 선택해 끌어다 메모·날짜 칸에 놓기 (노트에서는 빠짐 = 이동)
 app.addEventListener('dragover', e => {
@@ -508,6 +530,7 @@ app.addEventListener('click', e => {
   const t = e.target;
   if (t.closest('#setBtn')) return setPop(t.closest('#setBtn'));
   if (t.closest('#noteBtn')) return setNoteOpen(!noteOn);
+  if (t.closest('#noteU')) return underlineNote();
   if (t.id === 'nameEnter') return enter($('nameInput').value);
   if (t.id === 'copyBtn') return copyReport();
   if (t.closest('#pinBtn')) return togglePin();
@@ -544,6 +567,19 @@ app.addEventListener('input', e => {
   clearTimeout(noteT); noteT = setTimeout(saveNote, 400);
 });
 app.addEventListener('focusout', e => { if (e.target.id === 'noteText' && noteT) saveNote(); });
+// 밑줄 버튼을 눌러도 노트의 선택이 풀리지 않게
+app.addEventListener('pointerdown', e => { if (e.target.closest('#noteU')) e.preventDefault(); });
+// 노트에 붙여넣기는 글자만 (다른 곳 서식은 버림)
+app.addEventListener('paste', e => {
+  if (e.target.closest && e.target.closest('#noteText')) { e.preventDefault(); e.target.ownerDocument.execCommand('insertText', false, e.clipboardData.getData('text/plain')); }
+});
+// 노트: 굵게·기울임 단축키 막기 (밑줄만 허용)
+app.addEventListener('keydown', e => {
+  if (e.target.id !== 'noteText' || !(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'b' || k === 'i') e.preventDefault();
+  if (k === 'u') { e.preventDefault(); underlineNote(); }
+});
 app.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.isComposing) return;
   if (e.target.id === 'noteText') { if (e.ctrlKey || e.metaKey) { e.preventDefault(); sendNote(); } return; }
@@ -555,7 +591,7 @@ function onUndoKey(e) {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || e.shiftKey || !key) return;
   const t = e.target;
   if (t.tagName === 'INPUT' && t.value !== '' && t.type !== 'date') return;
-  if (t.tagName === 'TEXTAREA') return;   // 노트: 글자 되돌리기
+  if (t.isContentEditable) return;   // 노트: 글자 되돌리기
   e.preventDefault();
   undo();
 }

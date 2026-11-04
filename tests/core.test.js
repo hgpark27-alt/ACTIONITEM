@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, lineRange } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -167,10 +167,19 @@ test('노트 → 메모: 빈 줄 버리고, 앞의 글머리(-, *, •, 1.) 떼�
     ['회의록 정리', '견적 요청', '샘플 발송', '도면 검토', 'Valicy > 보고 내일', '그냥 한 줄']);
   assert.deepEqual(noteLines('  \n\n'), []);
 });
-test('노트 → 메모: 선택(또는 커서)이 걸친 줄 전체 범위, 다음 줄바꿈까지', () => {
-  const t = 'aaa\nbbb\nccc';
-  assert.deepEqual(lineRange(t, 5, 5), { start: 4, end: 8 });     // 커서만 → 그 줄
-  assert.deepEqual(lineRange(t, 1, 6), { start: 0, end: 8 });     // 두 줄에 걸친 선택
-  assert.deepEqual(lineRange(t, 9, 10), { start: 7, end: 11 });   // 마지막 줄: 앞 줄바꿈까지 같이 지움
-  assert.deepEqual(lineRange('only', 2, 2), { start: 0, end: 4 });
+test('노트 서식: 밑줄·줄(div)·줄바꿈만 남기고 나머지 태그·속성은 제거', () => {
+  assert.equal(cleanNoteHtml('<div>회의 <u style="x">견적</u></div><div><br></div>'), '<div>회의 <u>견적</u></div><div><br></div>');
+  assert.equal(cleanNoteHtml('<div><b>굵게</b> <span style="color:red">빨강</span></div>'), '<div>굵게 빨강</div>');
+  assert.equal(cleanNoteHtml('<img src=x onerror="alert(1)">글<script>alert(1)</script>'), '글alert(1)');
+  assert.equal(cleanNoteHtml('a &lt;b&gt; &amp; c'), 'a &lt;b&gt; &amp; c');
+  assert.equal(cleanNoteHtml('<p>문단</p><br>'), '<div>문단</div><br>');
+});
+test('노트 서식: 예전 글(줄글) → 줄마다 div, 특수문자 안전 처리', () => {
+  assert.equal(textToNoteHtml('첫 줄\n<둘째> & 줄\n\n'), '<div>첫 줄</div><div>&lt;둘째&gt; &amp; 줄</div><div><br></div><div><br></div>');
+  assert.equal(textToNoteHtml(''), '<div><br></div>');
+});
+test('노트 서식 → 줄글 (저장용·다른 기기 호환): 빈 줄 한 번, 밑줄 표시 제거, 특수문자 복원', () => {
+  assert.equal(noteHtmlToText('<div>회의 <u>아이디어</u></div><div><br></div><div>a &lt;b&gt; &amp;&nbsp;c</div>'), '회의 아이디어\n\na <b> & c');
+  assert.equal(noteHtmlToText('첫 줄<div>둘째<br></div><div>셋째</div>'), '첫 줄\n둘째\n셋째');
+  assert.equal(noteHtmlToText(''), '');
 });
