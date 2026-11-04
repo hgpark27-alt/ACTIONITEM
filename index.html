@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="stylesheet" href="style.css">
+  <script>if (window.chrome && chrome.webview) document.documentElement.classList.add('host');</script>
 </head>
 <body>
   <div id="home">
@@ -21,16 +22,17 @@
 
       <section id="main" hidden>
         <header>
+          <button id="noteBtn" class="icon" title="Note"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M6 2v12"/></svg></button>
           <button id="acctBtn" class="brand" title="계정"><span id="who"></span> <i id="conn" title="연결 상태"></i></button>
-          <button id="pinBtn" class="icon" title="항상 위"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M10.2 1.8l4 4-1.6.6-2.5 2.5-.3 3-1.3 1.3-2.9-2.9-3.2 3.2M4.4 7.3l4.3 4.3M4.4 7.3l1.3-1.3 3-.3 2.5-2.5z"/></svg></button>
           <button id="copyBtn" class="primary">보고서 복사</button>
+          <button id="pinBtn" class="icon" title="항상 위"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M10.2 1.8l4 4-1.6.6-2.5 2.5-.3 3-1.3 1.3-2.9-2.9-3.2 3.2M4.4 7.3l4.3 4.3M4.4 7.3l1.3-1.3 3-.3 2.5-2.5z"/></svg></button>
           <button id="setBtn" class="icon" title="설정"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         </header>
 
         <input id="quick" autocomplete="off" spellcheck="false" placeholder="Enter">
 
         <section id="memoZone" class="group" data-zone="memo">
-          <h3>메모 <span id="memoCnt" class="cnt"></span></h3>
+          <h3>Memo <span id="memoCnt" class="cnt"></span></h3>
           <ul class="items" id="memoList"></ul>
         </section>
 
@@ -39,6 +41,12 @@
           <div id="list"></div>
           <button id="oldBtn" class="link"></button>
         </section>
+
+        <!-- 왼쪽 노트: 생각나는 대로 적고 → 줄 단위로 메모로 보냄 -->
+        <aside id="note" hidden>
+          <div class="notehead">Note</div>
+          <textarea id="noteText" spellcheck="false"></textarea>
+        </aside>
 
         <!-- 끄는 동안만 화면 아래에 뜨는 놓을 곳 -->
         <div id="chips">

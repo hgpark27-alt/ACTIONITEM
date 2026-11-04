@@ -53,7 +53,7 @@ header { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
 #conn.on { background: #2f9e44; }
 button.icon { padding: 5px 7px; color: var(--muted); display: inline-flex; }
 button.icon:hover { color: var(--ink); }
-#pinBtn.on { color: var(--ink); background: var(--hover); }
+#pinBtn.on, #noteBtn.on { color: var(--ink); background: var(--hover); }
 #pinBtn.on svg { fill: currentColor; }
 
 /* 입력창: 흰 종이처럼 떠 있게 */
@@ -278,3 +278,42 @@ button.icon:hover { color: var(--ink); }
 :root[data-theme=dark] #quick { background: #383c44; border-color: #4c515b; }
 :root[data-theme=dark] #quick:focus { border-color: #6a707b; }
 :root[data-theme=dark] #quick::placeholder { color: #8f949c; }
+/* 왼쪽 노트 (RAW 메모): 넓은 창 = 옆에 붙음 / 좁은 창·폰 = 내용 위에 덮음 */
+#note {
+  position: fixed; z-index: 40; top: 18px; bottom: 18px; left: max(16px, calc(50% - 444px)); width: 280px;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 16px rgba(0,0,0,.05);
+}
+#note[hidden] { display: none; }
+.notehead {
+  padding: 12px 14px 0;
+  font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .4px;
+}
+#noteText {
+  flex: 1; width: 100%; resize: none; border: none; outline: none; background: transparent; color: var(--ink);
+  font-family: inherit; font-size: 14px; line-height: 1.7; padding: 6px 14px 14px;
+}
+@media (min-width: 760px) {
+  html:not(.host) #app.note-open { max-width: 920px; padding-left: 316px; }
+}
+@media (max-width: 759px) {
+  #note { top: 0; bottom: 0; left: 0; width: min(86vw, 320px); border-radius: 0 12px 12px 0; border-left: none;
+    box-shadow: 0 8px 40px rgba(0,0,0,.18); }
+}
+@media (hover: none), (pointer: coarse) {
+  #noteText { font-size: 16px; }
+}
+
+/* PC 앱: 화면 왼쪽 316px는 노트 칸(평소엔 창 밖에 숨어 있음). 노트를 열면 창이 늘어나며 드러남 */
+html.host #home { margin-left: 316px; }
+html.host #chips { left: 316px; }
+html.host #toast { left: calc(50% + 158px); }
+html.host #note {
+  top: 18px; bottom: 18px; left: 16px; width: 280px;
+  border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 16px rgba(0,0,0,.05);
+}
+@media (max-width: 776px) {
+  html.host #app { padding: 12px 10px 40px; }
+}

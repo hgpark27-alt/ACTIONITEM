@@ -52,10 +52,14 @@ class MainForm : Form
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hWnd);
 
     readonly string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ActionItem");
     readonly string stateFile;
     readonly WebView2 web;
+    bool noteOpen;      // 노트 열림 = 창 왼쪽에 노트 칸이 보임
+    int animWebW;       // 여닫는 동안: 웹 화면 폭을 고정하고 창 오른쪽에 붙여 둠 (다시 그리기 없음)
+    Timer anim;
 
     public MainForm()
     {
@@ -68,9 +72,9 @@ class MainForm : Form
         LoadState();
 
         web = new WebView2();
-        web.Dock = DockStyle.Fill;
         web.DefaultBackgroundColor = BackColor;
         Controls.Add(web);
+        LayoutWeb();
         Load += async (s, e) => await InitWeb();
     }
 
@@ -118,6 +122,8 @@ class MainForm : Form
         if (msg == "togglePin") { TopMost = !TopMost; SaveState(); }
         if (msg == "autostart:on") SetAutostart(true);
         if (msg == "autostart:off") SetAutostart(false);
+        if (msg == "note:open") SetNote(true);
+        if (msg == "note:close") SetNote(false);
         SendPinState();
     }
 
@@ -125,6 +131,54 @@ class MainForm : Form
     {
         web.CoreWebView2.PostWebMessageAsJson("{\"pinned\":" + (TopMost ? "true" : "false") +
             ",\"autostart\":" + (GetAutostart() ? "true" : "false") + "}");
+    }
+
+    // 노트: 웹 화면은 항상 창보다 노트 폭만큼 넓게(왼쪽은 창 밖에 숨김) 그려 둠.
+    // 노트를 열면 창 왼쪽 끝만 부드럽게 늘어나며 이미 그려진 노트가 드러남 → 화면 크기가 안 바뀌어 깜빡임 없음
+    const int NoteCss = 316;   // style.css의 노트 칸 폭과 같은 값
+    int Strip() { return (int)Math.Round(NoteCss * GetDpiForWindow(Handle) / 96.0); }
+    void LayoutWeb()
+    {
+        if (web == null || !IsHandleCreated) return;
+        Size c = ClientSize;
+        if (animWebW > 0) web.SetBounds(c.Width - animWebW, 0, animWebW, c.Height);
+        else { int hid = noteOpen ? 0 : Strip(); web.SetBounds(-hid, 0, c.Width + hid, c.Height); }
+    }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); LayoutWeb(); }
+
+    void SetNote(bool open)
+    {
+        if (open == noteOpen) return;
+        if (anim != null) { anim.Stop(); animWebW = 0; }
+        if (WindowState != FormWindowState.Normal) { noteOpen = open; LayoutWeb(); SaveState(); return; }
+        int st = Strip();
+        Rectangle from = Bounds, to, work = Screen.FromControl(this).WorkingArea;
+        if (open)
+        {
+            int w = Math.Min(from.Width + st, work.Width);
+            int x = Math.Max(work.Left, from.Right - w);
+            if (x + w > work.Right) x = work.Right - w;
+            to = new Rectangle(x, from.Y, w, from.Height);
+        }
+        else
+        {
+            int w = Math.Max(MinimumSize.Width, from.Width - st);
+            to = new Rectangle(from.Right - w, from.Y, w, from.Height);
+        }
+        animWebW = web.Width;
+        noteOpen = open;
+        DateTime t0 = DateTime.Now;
+        anim = new Timer();
+        anim.Interval = 10;
+        anim.Tick += (o, ev) =>
+        {
+            double p = Math.Min(1, (DateTime.Now - t0).TotalMilliseconds / 160.0);
+            double k = 1 - Math.Pow(1 - p, 3);   // 처음 빠르게, 끝에 부드럽게
+            Bounds = new Rectangle(from.X + (int)Math.Round((to.X - from.X) * k), from.Y,
+                from.Width + (int)Math.Round((to.Width - from.Width) * k), from.Height);
+            if (p >= 1) { ((Timer)o).Stop(); animWebW = 0; LayoutWeb(); SaveState(); }
+        };
+        anim.Start();
     }
 
     // Windows 시작 시 자동 실행: 현재 사용자 레지스트리 Run 항목
@@ -148,6 +202,7 @@ class MainForm : Form
     {
         base.OnHandleCreated(e);
         RegisterHotKey(Handle, 1, 0x0001 | 0x0002 | 0x4000, 0x20);   // ALT | CTRL | NOREPEAT, SPACE
+        LayoutWeb();
     }
 
     protected override void WndProc(ref Message m)
@@ -186,6 +241,7 @@ class MainForm : Form
             foreach (Screen sc in Screen.AllScreens)
                 if (sc.WorkingArea.IntersectsWith(saved)) { r = saved; break; }
             TopMost = p[4] == "1";
+            noteOpen = p.Length > 5 && p[5] != "0" && r == saved;
         }
         catch { }
         Bounds = r;
@@ -197,7 +253,7 @@ class MainForm : Form
         {
             Directory.CreateDirectory(dataDir);
             Rectangle b = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            File.WriteAllText(stateFile, b.X + "," + b.Y + "," + b.Width + "," + b.Height + "," + (TopMost ? "1" : "0"));
+            File.WriteAllText(stateFile, b.X + "," + b.Y + "," + b.Width + "," + b.Height + "," + (TopMost ? "1" : "0") + "," + (noteOpen ? "1" : "0"));
         }
         catch { }
     }

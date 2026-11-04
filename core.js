@@ -146,3 +146,19 @@ export function buildReport(items, today) {
   }
   return { text: text.join('\n\n'), html: html.join('') };
 }
+
+/* ---------- 노트(RAW 메모) → 메모 항목 ---------- */
+// 줄마다 하나의 항목. 빈 줄은 버리고 앞의 글머리(-, *, •, ·, 1. 1)) 제거
+export function noteLines(text) {
+  return String(text).split(/\r?\n/)
+    .map(l => l.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, '').trim())
+    .filter(Boolean);
+}
+// 선택(또는 커서) 위치가 걸친 줄 전체의 범위. 뒤 줄바꿈까지 포함, 마지막 줄이면 앞 줄바꿈을 포함
+export function lineRange(text, selStart, selEnd) {
+  let start = text.lastIndexOf('\n', selStart - 1) + 1;
+  let end = text.indexOf('\n', Math.max(selStart, selEnd - (selEnd > selStart && text[selEnd - 1] === '\n' ? 1 : 0)));
+  if (end === -1) { end = text.length; if (start > 0) start -= 1; }
+  else end += 1;
+  return { start, end };
+}

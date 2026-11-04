@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, lineRange } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -16,7 +16,7 @@ const TAG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke=
 
 let key = localStorage.getItem('ai-key');
 let name = localStorage.getItem('ai-name');
-let itemsRef = null, unsub = null;
+let itemsRef = null, unsub = null, noteRef = null, noteUnsub = null;
 let items = [];            // [{id, ...}]  memo:true = 메모, 아니면 액션 아이템
 let showOld = false;
 let busy = false, pending = false;   // 드래그·편집 중엔 다시 그리기를 미룸
@@ -33,6 +33,7 @@ const strip = it => { const { id, ...d } = it; return d; };
 function showLogin(msg = '') {
   $('main').hidden = true; $('login').hidden = false;
   $('loginMsg').textContent = msg;
+  if (noteOn || host) setNoteOpen(false);   // 로그인 화면에선 노트 닫음 (PC 앱 창도 원래 폭)
   $('nameInput').focus();
 }
 async function enter(raw) {
@@ -64,6 +65,7 @@ function start() {
     items = Object.entries(snap.val() || {}).map(([id, it]) => ({ id, ...it }));
     render();
   }, err => toast('DB 오류: ' + err.message));
+  startNote();
   $('quick').focus();
 }
 onValue(ref(db, '.info/connected'), s => $('conn').classList.toggle('on', !!s.val()));
@@ -92,20 +94,27 @@ function undo() {
 }
 
 // 입력 → 메모 맨 위에 쌓임 (날짜까지 적으면 바로 액션 아이템)
-function addItem(text) {
-  const p = parseQuickInput(text, today());
-  if (!p.title) return;
-  const now = Date.now();
-  const data = { category: p.category, title: p.title, done: false, createdAt: now, updatedAt: now };
-  if (p.date) {   // 바로 액션 아이템이 되는 경우만 빨강 (새 메모는 빨강 아님)
-    const same = items.filter(i => !i.memo && i.date === p.date);
-    Object.assign(data, { changed: true, date: p.date, order: same.length ? Math.max(...same.map(i => i.order ?? 0)) + 1 : 0 });
-  } else {
-    const memos = items.filter(i => i.memo);
-    Object.assign(data, { memo: true, order: memos.length ? Math.min(...memos.map(i => i.order ?? 0)) - 1 : 0 });
-  }
-  write({ [push(itemsRef).key]: { __new: data } });
+// 여러 줄을 한 번에 넣으면 적힌 순서 그대로, Ctrl+Z 한 번에 모두 취소
+// to: 생략 = 메모(날짜 적었으면 그 날짜) / { date } = 그 날짜 칸(null = Pending)으로 바로
+function addItems(texts, to) {
+  const now = Date.now(), ch = {};
+  const memoTop = Math.min(0, ...items.filter(i => i.memo).map(i => i.order ?? 0));
+  const lastOrder = {};
+  const ps = texts.map(t => parseQuickInput(t, today())).filter(p => p.title);
+  ps.forEach((p, k) => {
+    const data = { category: p.category, title: p.title, done: false, createdAt: now + k, updatedAt: now };
+    const date = to ? (p.date || to.date || null) : p.date;
+    if (to || p.date) {   // 바로 액션 아이템이 되는 경우만 빨강 (새 메모는 빨강 아님)
+      if (!(date in lastOrder)) lastOrder[date] = Math.max(-1, ...items.filter(i => !i.memo && (i.date || null) === date).map(i => i.order ?? 0));
+      Object.assign(data, { changed: true, order: ++lastOrder[date] });
+      if (date) data.date = date;
+    } else Object.assign(data, { memo: true, order: memoTop - ps.length + k });
+    ch[push(itemsRef).key] = { __new: data };
+  });
+  if (ps.length) write(ch);
+  return ps.length;
 }
+const addItem = text => addItems([text]);
 function deleteItem(it) {
   write({ [it.id]: null });
   toast('삭제됨', '되돌리기', undo);
@@ -284,7 +293,9 @@ function exportCSV() {
 }
 function logout() {
   localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
-  if (unsub) { unsub(); unsub = null; } items = []; showLogin();
+  if (unsub) { unsub(); unsub = null; } items = [];
+  if (noteUnsub) { noteUnsub(); noteUnsub = null; } $('noteText').value = '';
+  showLogin();
 }
 
 function acctPop(btn) {
@@ -409,6 +420,7 @@ async function togglePin() {
   d.body.append(app);
   d.addEventListener('keydown', onUndoKey);
   d.addEventListener('pointerdown', closePopOutside);
+  d.addEventListener('pointerdown', closeNoteOutside);
   applyTheme();
   setPinned(true);
   document.getElementById('pipNote').hidden = false;
@@ -420,6 +432,62 @@ async function togglePin() {
   });
   $('quick').focus();
 }
+
+/* ---------- 노트 (왼쪽, RAW 메모) → 메모 → 액션 아이템 ---------- */
+// 노트 글은 u/{key}/note 에 저장, PC·폰 실시간 동기화 (쓰는 중인 쪽은 덮어쓰지 않음)
+let noteT = 0;
+function startNote() {
+  if (noteUnsub) noteUnsub();
+  noteRef = ref(db, `u/${key}/note`);
+  noteUnsub = onValue(noteRef, snap => {
+    const ta = $('noteText'), v = (snap.val() && snap.val().text) || '';
+    if (ta.ownerDocument.activeElement !== ta && !noteT && ta.value !== v) ta.value = v;
+  });
+  setNoteOpen(localStorage.getItem('ai-note') === '1');
+}
+function saveNote() {
+  clearTimeout(noteT); noteT = 0;
+  if (noteRef) set(noteRef, { text: $('noteText').value, at: Date.now() });
+}
+let noteOn = false;
+function setNoteOpen(on) {
+  noteOn = on;
+  localStorage.setItem('ai-note', on ? '1' : '0');
+  app.classList.toggle('note-open', on);
+  $('noteBtn').classList.toggle('on', on);
+  if (!host) { $('note').hidden = !on; return; }
+  // PC 앱: 노트는 창 밖 왼쪽 칸에 미리 그려 두고, 창 가장자리만 부드럽게 늘였다 줄임
+  if (on) $('note').hidden = false;
+  else setTimeout(() => { if (!noteOn) $('note').hidden = true; }, 250);   // 줄어드는 동안은 보이게
+  host.postMessage(on ? 'note:open' : 'note:close');
+}
+const noteOverlay = () => !host && win().matchMedia('(max-width: 759px)').matches;   // 좁은 창: 내용 위에 덮는 방식
+// 커서가 있는 줄(또는 선택한 줄들) → 메모로 보내고 노트에서는 지움 (Ctrl+Z로 노트 글 복구 가능)
+function sendNote() {
+  const ta = $('noteText'), v = ta.value;
+  const r = lineRange(v, ta.selectionStart, ta.selectionEnd);
+  if (!addItems(noteLines(v.slice(r.start, r.end)))) return;
+  ta.focus();
+  ta.setSelectionRange(r.start, r.end);
+  if (!ta.ownerDocument.execCommand('delete')) ta.setRangeText('');
+  saveNote();
+}
+// 노트에서 글을 선택해 끌어다 메모·날짜 칸에 놓기 (노트에서는 빠짐 = 이동)
+app.addEventListener('dragover', e => {
+  if (e.dataTransfer.types.includes('text/plain') && e.target.closest('#main') && !e.target.closest('#note, input')) e.preventDefault();
+});
+app.addEventListener('drop', e => {
+  if (e.target.closest('#note, input') || !e.target.closest('#main')) return;
+  e.preventDefault();
+  const g = e.target.closest('#actionZone .group');
+  addItems(noteLines(e.dataTransfer.getData('text/plain')), g ? { date: g.dataset.date || null } : undefined);
+});
+function closeNoteOutside(e) {
+  if (!noteOn || !noteOverlay() || !e.target.closest) return;
+  if (e.target.closest('#note, #noteBtn')) return;
+  setNoteOpen(false);
+}
+document.addEventListener('pointerdown', closeNoteOutside);
 
 /* ---------- 알림 (앱 안) ---------- */
 let toastT;
@@ -438,6 +506,7 @@ function toast(msg, action, onAction) {
 app.addEventListener('click', e => {
   const t = e.target;
   if (t.closest('#setBtn')) return setPop(t.closest('#setBtn'));
+  if (t.closest('#noteBtn')) return setNoteOpen(!noteOn);
   if (t.id === 'nameEnter') return enter($('nameInput').value);
   if (t.id === 'copyBtn') return copyReport();
   if (t.closest('#pinBtn')) return togglePin();
@@ -469,8 +538,14 @@ app.addEventListener('pointerdown', e => {
 // 꾹 누른 뒤·드래그 중엔 화면 스크롤 막기 (폰)
 app.addEventListener('touchmove', e => { if (holding || dragging) e.preventDefault(); }, { passive: false });
 app.addEventListener('contextmenu', e => { if (e.target.closest('.item')) e.preventDefault(); });
+app.addEventListener('input', e => {
+  if (e.target.id !== 'noteText') return;
+  clearTimeout(noteT); noteT = setTimeout(saveNote, 400);
+});
+app.addEventListener('focusout', e => { if (e.target.id === 'noteText' && noteT) saveNote(); });
 app.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.isComposing) return;
+  if (e.target.id === 'noteText') { if (e.ctrlKey || e.metaKey) { e.preventDefault(); sendNote(); } return; }
   if (e.target.id === 'quick') { addItem(e.target.value); e.target.value = ''; }
   if (e.target.id === 'nameInput') enter(e.target.value);
 });
@@ -479,6 +554,7 @@ function onUndoKey(e) {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || e.shiftKey || !key) return;
   const t = e.target;
   if (t.tagName === 'INPUT' && t.value !== '' && t.type !== 'date') return;
+  if (t.tagName === 'TEXTAREA') return;   // 노트: 글자 되돌리기
   e.preventDefault();
   undo();
 }

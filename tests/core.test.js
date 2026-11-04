@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, lineRange } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -161,4 +161,16 @@ test('내보내기 CSV: 머리줄 + 항목, 쉼표·따옴표·줄바꿈 처리,
     '구분,날짜,분류,할 일,완료,변경표시,완료일,생성일\r\n' +
     '액션,2026-11-03,Valicy > LED,"PT ""초안"", 작성",Y,Y,2026-11-03,2026-11-01\r\n' +
     '메모,,,메모,,,,2026-11-02');
+});
+test('노트 → 메모: 빈 줄 버리고, 앞의 글머리(-, *, •, 1.) 떼기', () => {
+  assert.deepEqual(noteLines('- 회의록 정리\n\n  * 견적 요청 \n• 샘플 발송\n2) 도면 검토\n3. Valicy > 보고 내일\n그냥 한 줄'),
+    ['회의록 정리', '견적 요청', '샘플 발송', '도면 검토', 'Valicy > 보고 내일', '그냥 한 줄']);
+  assert.deepEqual(noteLines('  \n\n'), []);
+});
+test('노트 → 메모: 선택(또는 커서)이 걸친 줄 전체 범위, 다음 줄바꿈까지', () => {
+  const t = 'aaa\nbbb\nccc';
+  assert.deepEqual(lineRange(t, 5, 5), { start: 4, end: 8 });     // 커서만 → 그 줄
+  assert.deepEqual(lineRange(t, 1, 6), { start: 0, end: 8 });     // 두 줄에 걸친 선택
+  assert.deepEqual(lineRange(t, 9, 10), { start: 7, end: 11 });   // 마지막 줄: 앞 줄바꿈까지 같이 지움
+  assert.deepEqual(lineRange('only', 2, 2), { start: 0, end: 4 });
 });
