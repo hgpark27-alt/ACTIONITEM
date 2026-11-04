@@ -539,7 +539,7 @@ app.addEventListener('click', e => {
   const li = t.closest('.item');
   if (!li) return;
   const it = byId(li.dataset.id); if (!it) return;
-  if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now() });
+  if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now(), ...(it.memo ? {} : { changed: true }) });   // 액션 아이템 완료/해제도 변경(빨강)
   if (t.closest('.mark')) return patch(it.id, { changed: it.changed ? null : true });   // 빨강 직접 켜기/끄기
   if (t.closest('[data-a=del]')) return deleteItem(it);
   if (t.closest('[data-a=cat]')) return catPop(t.closest('[data-a=cat]'), it);
