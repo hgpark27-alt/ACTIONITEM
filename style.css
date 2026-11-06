@@ -45,7 +45,7 @@ input:focus { outline: none; }
 /* 상단 */
 header { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
 .brand {
-  border: none; padding: 4px 0; font-weight: 700; letter-spacing: -0.3px; margin-right: auto;
+  border: none; padding: 4px 0; font-weight: 700; letter-spacing: -0.3px;
   display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis;
 }
 .brand:hover { background: none; text-decoration: underline; }
@@ -319,3 +319,32 @@ html.host #note {
   html.host #app { padding: 12px 10px 40px; }
 }
 #noteText u { text-underline-offset: 3px; }
+
+/* 주간업무: 이름 오른쪽 버튼 → 위에서 스르륵 내려오는 칸 (높이 고정, 넘치면 칸 안에서 스크롤) */
+#weekBtn { margin-right: auto; border: none; padding: 4px 6px; font-size: 12px; color: var(--muted); }
+#weekBtn:hover { color: var(--ink); }
+#weekBtn.on { color: var(--ink); background: var(--hover); }
+#week {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px;
+  height: 0; overflow: hidden; visibility: hidden; margin-bottom: 0;
+  transition: height .22s ease-out, margin-bottom .22s ease-out, visibility 0s .22s;
+}
+#week.open { height: 170px; margin-bottom: 14px; visibility: visible; transition: height .22s ease-out, margin-bottom .22s ease-out; }
+.wday {
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}
+.wday b { font-size: 11px; color: var(--muted); padding: 5px 8px 0; }
+.wday textarea {
+  flex: 1; min-height: 0; resize: none; border: none; outline: none; background: transparent; color: var(--ink);
+  font-family: inherit; font-size: 12px; line-height: 1.5; padding: 2px 8px 6px; overflow-y: auto;
+}
+@media (max-width: 460px) {
+  #week { gap: 4px; }
+  .wday b { padding: 4px 5px 0; }
+  .wday textarea { padding: 2px 5px 5px; }
+}
+@media (hover: none), (pointer: coarse) {
+  #weekBtn { font-size: 13.5px; }
+  .wday textarea { font-size: 13px; }
+}

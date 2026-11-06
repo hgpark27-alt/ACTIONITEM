@@ -66,6 +66,7 @@ function start() {
     render();
   }, err => toast('DB 오류: ' + err.message));
   startNote();
+  startWeek();
   $('quick').focus();
 }
 onValue(ref(db, '.info/connected'), s => $('conn').classList.toggle('on', !!s.val()));
@@ -295,6 +296,7 @@ function logout() {
   localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
   if (unsub) { unsub(); unsub = null; } items = [];
   if (noteUnsub) { noteUnsub(); noteUnsub = null; } $('noteText').innerHTML = '';
+  if (weekUnsub) { weekUnsub(); weekUnsub = null; } app.querySelectorAll('#week textarea').forEach(t => { t.value = ''; });
   showLogin();
 }
 
@@ -434,6 +436,32 @@ async function togglePin() {
   $('quick').focus();
 }
 
+/* ---------- 주간업무 (월~금 반복 업무, 위에서 내려오는 칸) ---------- */
+// u/{key}/week = {mon, tue, wed, thu, fri} 글자만. 쓰는 중인 칸은 덮어쓰지 않음
+let weekUnsub = null;
+const weekT = {};
+function startWeek() {
+  if (weekUnsub) weekUnsub();
+  weekUnsub = onValue(ref(db, `u/${key}/week`), snap => {
+    const v = snap.val() || {};
+    app.querySelectorAll('#week textarea').forEach(t => {
+      const d = t.dataset.d;
+      if (t.ownerDocument.activeElement !== t && !weekT[d] && t.value !== (v[d] || '')) t.value = v[d] || '';
+    });
+  });
+  setWeekOpen(localStorage.getItem('ai-week') === '1');
+}
+function saveWeek(t) {
+  const d = t.dataset.d;
+  clearTimeout(weekT[d]); weekT[d] = 0;
+  if (key) set(ref(db, `u/${key}/week/${d}`), t.value || null);
+}
+function setWeekOpen(on) {
+  localStorage.setItem('ai-week', on ? '1' : '0');
+  $('week').classList.toggle('open', on);
+  $('weekBtn').classList.toggle('on', on);
+}
+
 /* ---------- 노트 (왼쪽, RAW 메모) → 메모 → 액션 아이템 ---------- */
 // 노트 글은 u/{key}/note 에 저장, PC·폰 실시간 동기화 (쓰는 중인 쪽은 덮어쓰지 않음)
 let noteT = 0;
@@ -497,10 +525,10 @@ function underlineNote() {
 }
 // 노트에서 글을 선택해 끌어다 메모·날짜 칸에 놓기 (노트에서는 빠짐 = 이동)
 app.addEventListener('dragover', e => {
-  if (e.dataTransfer.types.includes('text/plain') && e.target.closest('#main') && !e.target.closest('#note, input')) e.preventDefault();
+  if (e.dataTransfer.types.includes('text/plain') && e.target.closest('#main') && !e.target.closest('#note, input, textarea')) e.preventDefault();
 });
 app.addEventListener('drop', e => {
-  if (e.target.closest('#note, input') || !e.target.closest('#main')) return;
+  if (e.target.closest('#note, input, textarea') || !e.target.closest('#main')) return;
   e.preventDefault();
   const g = e.target.closest('#actionZone .group');
   addItems(noteLines(e.dataTransfer.getData('text/plain')), g ? { date: g.dataset.date || null } : undefined);
@@ -530,6 +558,7 @@ app.addEventListener('click', e => {
   const t = e.target;
   if (t.closest('#setBtn')) return setPop(t.closest('#setBtn'));
   if (t.closest('#noteBtn')) return setNoteOpen(!noteOn);
+  if (t.closest('#weekBtn')) return setWeekOpen(!$('week').classList.contains('open'));
   if (t.closest('#noteU')) return underlineNote();
   if (t.id === 'nameEnter') return enter($('nameInput').value);
   if (t.id === 'copyBtn') return copyReport();
@@ -563,10 +592,15 @@ app.addEventListener('pointerdown', e => {
 app.addEventListener('touchmove', e => { if (holding || dragging) e.preventDefault(); }, { passive: false });
 app.addEventListener('contextmenu', e => { if (e.target.closest('.item')) e.preventDefault(); });
 app.addEventListener('input', e => {
+  const w = e.target.closest('#week textarea');
+  if (w) { clearTimeout(weekT[w.dataset.d]); weekT[w.dataset.d] = setTimeout(() => saveWeek(w), 400); return; }
   if (e.target.id !== 'noteText') return;
   clearTimeout(noteT); noteT = setTimeout(saveNote, 400);
 });
-app.addEventListener('focusout', e => { if (e.target.id === 'noteText' && noteT) saveNote(); });
+app.addEventListener('focusout', e => {
+  if (e.target.id === 'noteText' && noteT) saveNote();
+  if (e.target.closest('#week textarea') && weekT[e.target.dataset.d]) saveWeek(e.target);
+});
 // 밑줄 버튼을 눌러도 노트의 선택이 풀리지 않게
 app.addEventListener('pointerdown', e => { if (e.target.closest('#noteU')) e.preventDefault(); });
 // 노트에 붙여넣기는 글자만 (다른 곳 서식은 버림)
@@ -591,7 +625,7 @@ function onUndoKey(e) {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || e.shiftKey || !key) return;
   const t = e.target;
   if (t.tagName === 'INPUT' && t.value !== '' && t.type !== 'date') return;
-  if (t.isContentEditable) return;   // 노트: 글자 되돌리기
+  if (t.isContentEditable || t.tagName === 'TEXTAREA') return;   // 노트·주간업무 칸: 글자 되돌리기
   e.preventDefault();
   undo();
 }
