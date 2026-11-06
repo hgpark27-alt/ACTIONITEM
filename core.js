@@ -179,3 +179,36 @@ export function textToNoteHtml(text) {
   const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return String(text).split(/\r?\n/).map(l => `<div>${l ? e(l) : '<br>'}</div>`).join('');
 }
+
+/* ---------- 주간업무 (월~금 반복 업무) ---------- */
+// 저장 형식: 요일마다 [{t: 글, c: 직접 고른 성격(없으면 단어로 추측)}]. 예전 줄글도 읽음
+const TIME_RE = /(?:^|\s)([01]?\d|2[0-3]):([0-5]\d)(?=\s|$)/;
+export function weekList(v) {
+  if (Array.isArray(v)) return v.filter(x => x && String(x.t || '').trim()).map(x => (x.c ? { t: x.t, c: x.c } : { t: x.t }));
+  const out = [];
+  for (const raw of String(v || '').split(/\r?\n/)) {
+    const l = raw.trim();
+    if (!l) continue;
+    if (out.length && /^([01]?\d|2[0-3]):[0-5]\d$/.test(l)) out[out.length - 1].t += ' ' + l;
+    else out.push({ t: l });
+  }
+  return out;
+}
+export function weekSplit(t) {
+  const m = String(t).match(TIME_RE);
+  if (!m) return { time: '', text: String(t).trim() };
+  return { time: m[1].padStart(2, '0') + ':' + m[2], text: String(t).replace(TIME_RE, ' ').replace(/\s+/g, ' ').trim() };
+}
+export const WEEK_CATS = ['meet', 'prep', 'send', 'etc'];
+export function weekCat(it) {
+  if (it.c && WEEK_CATS.includes(it.c)) return it.c;
+  const t = String(it.t).toLowerCase();
+  if (/회의|미팅|컨콜|콜|call|meeting|면담|ojt/.test(t)) return 'meet';
+  if (/송부|메일|보고|발송|공유|제출|mail/.test(t)) return 'send';
+  if (/자료|준비|정리|작성|검토|업뎃|업데이트/.test(t)) return 'prep';
+  return 'etc';
+}
+export function weekSorted(list) {
+  const r = list.map((x, i) => ({ ...x, i, time: weekSplit(x.t).time }));
+  return [...r.filter(x => x.time).sort((a, b) => a.time.localeCompare(b.time) || a.i - b.i), ...r.filter(x => !x.time)];
+}

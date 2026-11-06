@@ -324,29 +324,50 @@ html.host #note {
 #weekBtn { margin-right: auto; border: none; padding: 4px 6px; font-size: 12px; color: var(--muted); }
 #weekBtn:hover { color: var(--ink); }
 #weekBtn.on { color: var(--ink); background: var(--hover); }
+:root { --w-meet: hsl(214 70% 56%); --w-prep: hsl(150 45% 42%); --w-send: hsl(28 88% 54%); --w-etc: #c4c7cc; }
+:root[data-theme=dark] { --w-meet: hsl(214 75% 66%); --w-prep: hsl(150 45% 55%); --w-send: hsl(28 85% 62%); --w-etc: #62666e; }
 #week {
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px;
+  display: flex; gap: 6px;
   height: 0; overflow: hidden; visibility: hidden; margin-bottom: 0;
   transition: height .22s ease-out, margin-bottom .22s ease-out, visibility 0s .22s;
 }
-#week.open { height: 170px; margin-bottom: 14px; visibility: visible; transition: height .22s ease-out, margin-bottom .22s ease-out; }
+#week.open { height: 184px; margin-bottom: 14px; visibility: visible; transition: height .22s ease-out, margin-bottom .22s ease-out; }
 .wday {
-  display: flex; flex-direction: column; min-height: 0;
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
 }
-.wday b { font-size: 11px; color: var(--muted); padding: 5px 8px 0; }
-.wday textarea {
-  flex: 1; min-height: 0; resize: none; border: none; outline: none; background: transparent; color: var(--ink);
-  font-family: inherit; font-size: 12px; line-height: 1.5; padding: 2px 8px 6px; overflow-y: auto;
+.wday.today { flex-grow: 1.45; border-color: var(--ink); }
+.wday b { font-size: 11px; color: var(--muted); padding: 5px 8px 3px; }
+.wday.today b { color: var(--ink); }
+.wlist { list-style: none; margin: 0; padding: 0 0 4px; flex: 1; min-height: 0; overflow-y: auto; }
+/* 업무 한 줄: 성격 색 점 · 시간 · 글 (길면 …) */
+.wrow {
+  display: flex; align-items: center; gap: 4px; padding: 0 6px; height: 23px;
+  border-bottom: 1px solid var(--line); font-size: 12px; cursor: text;
 }
+.wrow:hover { background: var(--hover); }
+.wdot {
+  flex: none; width: 7px; height: 7px; padding: 0; border: none; border-radius: 50%;
+  background: var(--w-etc); cursor: pointer;
+}
+.wdot:hover { background: var(--w-etc); box-shadow: 0 0 0 3px var(--hover); }
+.wrow[data-c=meet] .wdot { background: var(--w-meet); }
+.wrow[data-c=prep] .wdot { background: var(--w-prep); }
+.wrow[data-c=send] .wdot { background: var(--w-send); }
+.wtime { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: -0.2px; }
+.wt { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wrow.editing { padding: 0 4px; }
+.win { width: 100%; font-size: 12px; border: none; border-bottom: 1px solid var(--ink); padding: 2px 3px; }
+.wadd { padding: 2px 8px; color: var(--faint); font-size: 13px; cursor: pointer; }
+.wadd:hover { color: var(--ink); }
 @media (max-width: 460px) {
   #week { gap: 4px; }
-  .wday b { padding: 4px 5px 0; }
-  .wday textarea { padding: 2px 5px 5px; }
+  .wday b { padding: 4px 5px 3px; }
+  .wrow { padding: 0 4px; gap: 3px; }
+  .wtime { display: none; }
 }
 @media (hover: none), (pointer: coarse) {
   #weekBtn { font-size: 13.5px; }
-  .wday textarea { font-size: 13px; }
+  .wrow, .win { font-size: 13px; }
+  .wrow { height: 27px; }
 }
-.wday.today { border-color: var(--ink); }
-.wday.today b { color: var(--ink); }

@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, WEEK_CATS } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -296,7 +296,7 @@ function logout() {
   localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
   if (unsub) { unsub(); unsub = null; } items = [];
   if (noteUnsub) { noteUnsub(); noteUnsub = null; } $('noteText').innerHTML = '';
-  if (weekUnsub) { weekUnsub(); weekUnsub = null; } app.querySelectorAll('#week textarea').forEach(t => { t.value = ''; });
+  if (weekUnsub) { weekUnsub(); weekUnsub = null; } week = {}; weekEdit = null; WDAYS.forEach(renderWeekDay);
   showLogin();
 }
 
@@ -437,30 +437,61 @@ async function togglePin() {
 }
 
 /* ---------- 주간업무 (월~금 반복 업무, 위에서 내려오는 칸) ---------- */
-// u/{key}/week = {mon, tue, wed, thu, fri} 글자만. 쓰는 중인 칸은 덮어쓰지 않음
+// u/{key}/week/{mon..fri} = [{t: 글, c: 직접 고른 성격}]. 한 줄 = 업무 하나, 시간 있으면 시간순
 let weekUnsub = null;
-const weekT = {};
+let week = {};              // 요일 → 업무 목록
+let weekEdit = null;        // 고치는 중 {d, i} (i = -1 이면 새로 추가)
+const WDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
 function startWeek() {
   if (weekUnsub) weekUnsub();
   weekUnsub = onValue(ref(db, `u/${key}/week`), snap => {
     const v = snap.val() || {};
-    app.querySelectorAll('#week textarea').forEach(t => {
-      const d = t.dataset.d;
-      if (t.ownerDocument.activeElement !== t && !weekT[d] && t.value !== (v[d] || '')) t.value = v[d] || '';
-    });
+    WDAYS.forEach(d => { week[d] = weekList(v[d]); if (!weekEdit || weekEdit.d !== d) renderWeekDay(d); });   // 쓰는 중인 칸은 덮어쓰지 않음
   });
   markWeekToday();
   setWeekOpen(localStorage.getItem('ai-week') === '1');
 }
-function saveWeek(t) {
-  const d = t.dataset.d;
-  clearTimeout(weekT[d]); weekT[d] = 0;
-  if (key) set(ref(db, `u/${key}/week/${d}`), t.value || null);
+function renderWeekDay(d) {
+  const ul = app.querySelector(`#week .wday[data-d=${d}] .wlist`);
+  const e = weekEdit && weekEdit.d === d ? weekEdit : null;
+  const inp = v => `<li class="wrow editing"><input class="win" value="${esc(v)}" autocomplete="off" spellcheck="false"></li>`;
+  ul.innerHTML = weekSorted(week[d] || []).map(x => {
+    if (e && e.i === x.i) return inp(x.t);
+    const s = weekSplit(x.t), c = weekCat(x);
+    return `<li class="wrow" data-i="${x.i}" data-c="${c}" title="${esc(x.t)}"><button class="wdot"></button>${s.time ? `<span class="wtime">${s.time}</span>` : ''}<span class="wt">${esc(s.text)}</span></li>`;
+  }).join('') + (e && e.i < 0 ? inp('') : '<li class="wadd">+</li>');
+  const i = ul.querySelector('.win');
+  if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); i.scrollIntoView({ block: 'nearest' }); }
+}
+function editWeek(d, i) {
+  if (weekEdit) { const o = weekEdit; weekEdit = null; renderWeekDay(o.d); }
+  weekEdit = { d, i };
+  renderWeekDay(d);
+}
+// Enter·바깥 누름 = 저장 / 비우면 삭제 / 새 줄은 Enter 치면 다음 줄 바로 이어서
+function commitWeek(input, more) {
+  const e = weekEdit;
+  if (!e || !input.isConnected) return;
+  weekEdit = null;
+  const v = input.value.trim(), list = [...(week[e.d] || [])];
+  if (e.i < 0) { if (v) list.push({ t: v }); }
+  else if (!v) list.splice(e.i, 1);
+  else if (v !== list[e.i].t) list[e.i] = { ...list[e.i], t: v };
+  week[e.d] = list;
+  if (key) set(ref(db, `u/${key}/week/${e.d}`), list.length ? list : null);
+  if (more && e.i < 0 && v) editWeek(e.d, -1); else renderWeekDay(e.d);
+}
+function cycleWeekCat(d, i) {
+  const list = [...(week[d] || [])], it = list[i];
+  list[i] = { ...it, c: WEEK_CATS[(WEEK_CATS.indexOf(weekCat(it)) + 1) % WEEK_CATS.length] };
+  week[d] = list;
+  renderWeekDay(d);
+  if (key) set(ref(db, `u/${key}/week/${d}`), list);
 }
 // 오늘 요일 칸 테두리 (주말엔 없음)
 function markWeekToday() {
   const d = ['', 'mon', 'tue', 'wed', 'thu', 'fri', ''][new Date().getDay()];
-  app.querySelectorAll('#week .wday').forEach(c => c.classList.toggle('today', !!d && c.querySelector('textarea').dataset.d === d));
+  app.querySelectorAll('#week .wday').forEach(c => c.classList.toggle('today', !!d && c.dataset.d === d));
 }
 function setWeekOpen(on) {
   localStorage.setItem('ai-week', on ? '1' : '0');
@@ -531,10 +562,10 @@ function underlineNote() {
 }
 // 노트에서 글을 선택해 끌어다 메모·날짜 칸에 놓기 (노트에서는 빠짐 = 이동)
 app.addEventListener('dragover', e => {
-  if (e.dataTransfer.types.includes('text/plain') && e.target.closest('#main') && !e.target.closest('#note, input, textarea')) e.preventDefault();
+  if (e.dataTransfer.types.includes('text/plain') && e.target.closest('#main') && !e.target.closest('#note, input')) e.preventDefault();
 });
 app.addEventListener('drop', e => {
-  if (e.target.closest('#note, input, textarea') || !e.target.closest('#main')) return;
+  if (e.target.closest('#note, input') || !e.target.closest('#main')) return;
   e.preventDefault();
   const g = e.target.closest('#actionZone .group');
   addItems(noteLines(e.dataTransfer.getData('text/plain')), g ? { date: g.dataset.date || null } : undefined);
@@ -565,6 +596,14 @@ app.addEventListener('click', e => {
   if (t.closest('#setBtn')) return setPop(t.closest('#setBtn'));
   if (t.closest('#noteBtn')) return setNoteOpen(!noteOn);
   if (t.closest('#weekBtn')) return setWeekOpen(!$('week').classList.contains('open'));
+  const wd = t.closest('#week .wday');
+  if (wd) {
+    const r = t.closest('.wrow[data-i]');
+    if (t.closest('.wdot') && r) return cycleWeekCat(wd.dataset.d, +r.dataset.i);
+    if (r) return editWeek(wd.dataset.d, +r.dataset.i);
+    if (t.closest('.wadd')) return editWeek(wd.dataset.d, -1);
+    return;
+  }
   if (t.closest('#noteU')) return underlineNote();
   if (t.id === 'nameEnter') return enter($('nameInput').value);
   if (t.id === 'copyBtn') return copyReport();
@@ -598,14 +637,18 @@ app.addEventListener('pointerdown', e => {
 app.addEventListener('touchmove', e => { if (holding || dragging) e.preventDefault(); }, { passive: false });
 app.addEventListener('contextmenu', e => { if (e.target.closest('.item')) e.preventDefault(); });
 app.addEventListener('input', e => {
-  const w = e.target.closest('#week textarea');
-  if (w) { clearTimeout(weekT[w.dataset.d]); weekT[w.dataset.d] = setTimeout(() => saveWeek(w), 400); return; }
   if (e.target.id !== 'noteText') return;
   clearTimeout(noteT); noteT = setTimeout(saveNote, 400);
 });
 app.addEventListener('focusout', e => {
   if (e.target.id === 'noteText' && noteT) saveNote();
-  if (e.target.closest('#week textarea') && weekT[e.target.dataset.d]) saveWeek(e.target);
+  if (e.target.classList.contains('win')) commitWeek(e.target, false);
+});
+// 주간업무 입력칸: Enter = 저장(새 줄이면 다음 줄 이어서), Esc = 취소
+app.addEventListener('keydown', e => {
+  if (!e.target.classList.contains('win') || e.isComposing) return;
+  if (e.key === 'Enter') { e.preventDefault(); commitWeek(e.target, true); }
+  if (e.key === 'Escape') { const d = weekEdit && weekEdit.d; weekEdit = null; if (d) renderWeekDay(d); }
 });
 // 밑줄 버튼을 눌러도 노트의 선택이 풀리지 않게
 app.addEventListener('pointerdown', e => { if (e.target.closest('#noteU')) e.preventDefault(); });
@@ -631,7 +674,8 @@ function onUndoKey(e) {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || e.shiftKey || !key) return;
   const t = e.target;
   if (t.tagName === 'INPUT' && t.value !== '' && t.type !== 'date') return;
-  if (t.isContentEditable || t.tagName === 'TEXTAREA') return;   // 노트·주간업무 칸: 글자 되돌리기
+  if (t.isContentEditable) return;   // 노트: 글자 되돌리기
+  if (t.closest('#week')) return;   // 주간업무 입력칸: 글자 되돌리기
   e.preventDefault();
   undo();
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -182,4 +182,27 @@ test('노트 서식 → 줄글 (저장용·다른 기기 호환): 빈 줄 한 �
   assert.equal(noteHtmlToText('<div>회의 <u>아이디어</u></div><div><br></div><div>a &lt;b&gt; &amp;&nbsp;c</div>'), '회의 아이디어\n\na <b> & c');
   assert.equal(noteHtmlToText('첫 줄<div>둘째<br></div><div>셋째</div>'), '첫 줄\n둘째\n셋째');
   assert.equal(noteHtmlToText(''), '');
+});
+test('주간업무 목록: 예전 글(줄글) → 한 줄 = 업무 하나, 시간만 있는 줄은 윗줄에 붙임', () => {
+  assert.deepEqual(weekList('Reign 컨콜\n09:30\n\n자료 정리 '), [{ t: 'Reign 컨콜 09:30' }, { t: '자료 정리' }]);
+  assert.deepEqual(weekList([{ t: 'a', c: 'meet' }, null, { t: '' }]), [{ t: 'a', c: 'meet' }]);
+  assert.deepEqual(weekList(undefined), []);
+});
+test('주간업무 시간: 글 속 09:30 / 9:30 → 앞에 따로 표시, 글에서는 뺌', () => {
+  assert.deepEqual(weekSplit('Reign 컨콜 09:30'), { time: '09:30', text: 'Reign 컨콜' });
+  assert.deepEqual(weekSplit('9:00 LED OPO 컨콜'), { time: '09:00', text: 'LED OPO 컨콜' });
+  assert.deepEqual(weekSplit('개발회의'), { time: '', text: '개발회의' });
+  assert.deepEqual(weekSplit('rev 20.4 업뎃'), { time: '', text: 'rev 20.4 업뎃' });
+});
+test('주간업무 성격: 직접 고른 색 우선, 없으면 단어로 추측', () => {
+  assert.equal(weekCat({ t: 'Reign 컨콜' }), 'meet');
+  assert.equal(weekCat({ t: '개발회의' }), 'meet');
+  assert.equal(weekCat({ t: 'PO List 정리' }), 'prep');
+  assert.equal(weekCat({ t: 'LED OPO 송부' }), 'send');
+  assert.equal(weekCat({ t: '퇴근확인' }), 'etc');
+  assert.equal(weekCat({ t: 'Reign 컨콜', c: 'prep' }), 'prep');
+});
+test('주간업무 순서: 시간 있는 것 시간순 → 시간 없는 것 쓴 순서 (원래 번호 유지)', () => {
+  const l = [{ t: 'A' }, { t: 'B 13:00' }, { t: 'C' }, { t: 'D 08:30' }];
+  assert.deepEqual(weekSorted(l).map(x => x.i), [3, 1, 0, 2]);
 });
