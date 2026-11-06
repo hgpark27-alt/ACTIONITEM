@@ -449,12 +449,18 @@ function startWeek() {
       if (t.ownerDocument.activeElement !== t && !weekT[d] && t.value !== (v[d] || '')) t.value = v[d] || '';
     });
   });
+  markWeekToday();
   setWeekOpen(localStorage.getItem('ai-week') === '1');
 }
 function saveWeek(t) {
   const d = t.dataset.d;
   clearTimeout(weekT[d]); weekT[d] = 0;
   if (key) set(ref(db, `u/${key}/week/${d}`), t.value || null);
+}
+// 오늘 요일 칸 테두리 (주말엔 없음)
+function markWeekToday() {
+  const d = ['', 'mon', 'tue', 'wed', 'thu', 'fri', ''][new Date().getDay()];
+  app.querySelectorAll('#week .wday').forEach(c => c.classList.toggle('today', !!d && c.querySelector('textarea').dataset.d === d));
 }
 function setWeekOpen(on) {
   localStorage.setItem('ai-week', on ? '1' : '0');
@@ -634,7 +640,7 @@ document.getElementById('unpin').onclick = () => pipWin && pipWin.close();
 
 // 자정이 지나면 "오늘" 기준 다시 계산
 let lastDay = today();
-setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); } }, 60000);
+setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); markWeekToday(); } }, 60000);
 // 편집·드래그 중 미뤄둔 화면 갱신 처리
 setInterval(() => { if (pending && !busy) render(); }, 300);
 

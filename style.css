@@ -348,3 +348,5 @@ html.host #note {
   #weekBtn { font-size: 13.5px; }
   .wday textarea { font-size: 13px; }
 }
+.wday.today { border-color: var(--ink); }
+.wday.today b { color: var(--ink); }
