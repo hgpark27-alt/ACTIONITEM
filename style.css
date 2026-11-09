@@ -142,16 +142,19 @@ button.icon:hover { color: var(--ink); }
 .item.changed .title { color: var(--done); }
 .item.done .txt, .item.done.changed .title { color: var(--muted); text-decoration: line-through; }
 /* 오른쪽 끝 변경 표시 점: 빨강 = 변경됨 */
-.mark {
+.mark, .nocopy-dot {
   flex: none; width: 18px; height: 20px; padding: 0; border: none; background: none; position: relative;
 }
-.mark::after {
+.mark::after, .nocopy-dot::after {
   content: ""; position: absolute; left: 5px; top: 6px; width: 8px; height: 8px; border-radius: 50%;
   border: 1.3px solid #c4c7cc; box-sizing: border-box;
 }
-.mark:hover { background: none; }
+.mark:hover, .nocopy-dot:hover { background: none; }
 .mark:hover::after { border-color: var(--done); }
 .item.changed .mark::after { background: var(--done); border-color: var(--done); }
+/* 빨간 점 오른쪽 검은 점: 채워지면 보고서 복사에서 제외 */
+.nocopy-dot:hover::after { border-color: var(--ink); }
+.item.nocopy .nocopy-dot::after { background: var(--ink); border-color: var(--ink); }
 .item.done .seg { background: #eef0f2; color: var(--faint); }
 .catchip { padding: 2px 3px 2px 4px; }
 .catchip .seg { margin-right: 1px; }
@@ -165,6 +168,7 @@ button.icon:hover { color: var(--ink); }
   position: absolute; right: 24px; top: 5px; padding-left: 8px;
   background: linear-gradient(to right, transparent, var(--hover) 8px);
 }
+.item:not(.memo) .act { right: 50px; }   /* 점 두 개 왼쪽에 뜨도록 */
 .item:hover .act { visibility: visible; }
 .act button { border: none; padding: 0 5px; color: var(--muted); font-size: 12px; line-height: 20px; }
 .act button:hover, .calbtn:hover { color: var(--ink); background: none; }
@@ -241,8 +245,8 @@ button.icon:hover { color: var(--ink); }
   .seg { font-size: 13.5px; line-height: 19px; padding: 0 7px; }
   .chk { width: 15px; height: 15px; margin-top: 4px; }
   .item.done .chk::after { font-size: 11px; line-height: 12px; }
-  .mark { width: 22px; height: 23px; }
-  .mark::after { left: 6px; top: 7px; width: 9px; height: 9px; }
+  .mark, .nocopy-dot { width: 22px; height: 23px; }
+  .mark::after, .nocopy-dot::after { left: 6px; top: 7px; width: 9px; height: 9px; }
 
   .chip { font-size: 14.5px; padding: 5px 12px; }
   #toast { font-size: 14.5px; }

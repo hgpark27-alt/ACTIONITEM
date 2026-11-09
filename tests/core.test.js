@@ -227,3 +227,16 @@ test('worldClocks: 라스베가스·미네소타·뉴욕 현재 시각 (서머�
   // 자정은 24:00 이 아니라 00:00
   assert.equal(worldClocks(new Date('2026-11-09T08:00:00Z'))[0].time, '00:00');
 });
+
+test('보고서 복사: 검은 점(noCopy) 항목은 빠지고 번호는 이어짐, 다 빠진 날짜는 제목도 없음', () => {
+  const items = [
+    { title: '첫째', date: TODAY, order: 0 },
+    { title: '제외', date: TODAY, order: 1, noCopy: true },
+    { title: '둘째', date: TODAY, order: 2 },
+    { title: '내일 제외', date: '2026-11-04', order: 0, noCopy: true },
+  ];
+  const r = buildReport(items, TODAY);
+  assert.equal(r.text, '[11월 3일]\n1. 첫째\n2. 둘째');
+  assert.doesNotMatch(r.html, /제외/);
+  assert.equal(buildReport([{ title: '제외', date: TODAY, noCopy: true }], TODAY).text, '');
+});

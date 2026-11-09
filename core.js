@@ -131,7 +131,7 @@ export function toCSV(items) {
 // 업무보고 형식: 텍스트(메모장/메신저용) + HTML(메일용, 변경은 빨강, 완료는 빨강 취소선)
 // 번호: 날짜 칸은 날짜가 바뀌어도 1, 2, 3… 이어서 / Pending은 1부터 다시
 export function buildReport(items, today) {
-  const groups = groupByDate(visibleItems(items.filter(i => !i.memo), today));
+  const groups = groupByDate(visibleItems(items.filter(i => !i.memo && !i.noCopy), today));
   const text = [], html = [];
   let n = 0;
   for (const g of groups) {

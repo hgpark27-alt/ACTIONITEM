@@ -158,7 +158,7 @@ function render() {
 }
 function row(i) {
   const cat = i.category ? `<span class="cat">${catHtml(i.category)}</span>` : '';
-  return `<li class="item${i.done ? ' done' : ''}${i.memo ? ' memo' : ''}${i.changed ? ' changed' : ''}" data-id="${i.id}">
+  return `<li class="item${i.done ? ' done' : ''}${i.memo ? ' memo' : ''}${i.changed ? ' changed' : ''}${i.noCopy ? ' nocopy' : ''}" data-id="${i.id}">
     <button class="chk" title="완료"></button>
     <div class="txt">${cat}<span class="title">${esc(i.title)}</span></div>
     <span class="act">
@@ -167,6 +167,7 @@ function row(i) {
       <button data-a="del" title="삭제">${DEL}</button>
     </span>
     <button class="mark" title="변경 표시"></button>
+    ${i.memo ? '' : '<button class="nocopy-dot" title="보고서 복사에서 제외"></button>'}
   </li>`;
 }
 // 끄는 동안 화면 아래에 뜨는 놓을 곳
@@ -394,7 +395,7 @@ async function copyReport() {
     await w.navigator.clipboard.writeText(text);
   }
   // 보고 후 빨강 한 번에 해제 (Ctrl+Z로 되돌리기 가능)
-  const red = items.filter(i => i.changed);
+  const red = items.filter(i => i.changed && !i.noCopy);   // 복사에서 뺀 항목은 아직 보고 전이므로 빨강 유지
   if (!red.length) return toast('복사됨');
   toast('복사됨', '빨강 모두 해제', () => write(Object.fromEntries(red.map(i => [i.id, { changed: null }]))));
 }
@@ -616,6 +617,7 @@ app.addEventListener('click', e => {
   const it = byId(li.dataset.id); if (!it) return;
   if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now(), ...(it.memo ? {} : { changed: true }) });   // 액션 아이템 완료/해제도 변경(빨강)
   if (t.closest('.mark')) return patch(it.id, { changed: it.changed ? null : true });   // 빨강 직접 켜기/끄기
+  if (t.closest('.nocopy-dot')) return patch(it.id, { noCopy: it.noCopy ? null : true });   // 검은 점: 보고서 복사에서 제외
   if (t.closest('[data-a=del]')) return deleteItem(it);
   if (t.closest('[data-a=cat]')) return catPop(t.closest('[data-a=cat]'), it);
   if (t.matches('input[data-a=date]')) { e.preventDefault(); try { t.showPicker(); } catch { } }   // 아이콘 바로 옆에 달력
@@ -628,11 +630,11 @@ app.addEventListener('change', e => {
 });
 app.addEventListener('dblclick', e => {
   const li = e.target.closest('.item');
-  if (li && !e.target.closest('.chk, .act, .mark, input')) editRow(li);
+  if (li && !e.target.closest('.chk, .act, .mark, .nocopy-dot, input')) editRow(li);
 });
 app.addEventListener('pointerdown', e => {
   const li = e.target.closest('.item');
-  if (li && e.button === 0 && !e.target.closest('.chk, .act, .mark, input')) pressItem(e, li);
+  if (li && e.button === 0 && !e.target.closest('.chk, .act, .mark, .nocopy-dot, input')) pressItem(e, li);
 });
 // 꾹 누른 뒤·드래그 중엔 화면 스크롤 막기 (폰)
 app.addEventListener('touchmove', e => { if (holding || dragging) e.preventDefault(); }, { passive: false });
