@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, WEEK_CATS } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, WEEK_CATS, worldClocks } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -458,7 +458,7 @@ function renderWeekDay(d) {
   ul.innerHTML = weekSorted(week[d] || []).map(x => {
     if (e && e.i === x.i) return inp(x.t);
     const s = weekSplit(x.t), c = weekCat(x);
-    return `<li class="wrow" data-i="${x.i}" data-c="${c}" title="${esc(x.t)}"><button class="wdot"></button>${s.time ? `<span class="wtime">${s.time}</span>` : ''}<span class="wt">${esc(s.text)}</span></li>`;
+    return `<li class="wrow" data-i="${x.i}" data-c="${c}" title="${esc(x.t)}"><button class="wdot"></button>${s.time ? `<span class="wtime">${s.time}</span>` : ''}<span class="wt">${esc(s.text)}</span><span class="wsh">${esc(weekShort(x.t))}</span></li>`;
   }).join('') + (e && e.i < 0 ? inp('') : '<li class="wadd">+</li>');
   const i = ul.querySelector('.win');
   if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); i.scrollIntoView({ block: 'nearest' }); }
@@ -597,6 +597,7 @@ app.addEventListener('click', e => {
   if (t.closest('#noteBtn')) return setNoteOpen(!noteOn);
   if (t.closest('#weekBtn')) return setWeekOpen(!$('week').classList.contains('open'));
   const wd = t.closest('#week .wday');
+  if (t.closest('#week') && !$('week').classList.contains('open')) return setWeekOpen(true);   // 얇은 띠 누르면 펼침
   if (wd) {
     const r = t.closest('.wrow[data-i]');
     if (t.closest('.wdot') && r) return cycleWeekCat(wd.dataset.d, +r.dataset.i);
@@ -696,3 +697,11 @@ applyTheme();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
 
 if (key && name) start(); else showLogin();
+
+// 헤더 시계 (LV · MN · NY)
+function tickClocks() {
+  const html = worldClocks().map(c => `<span title="${c.name}">${c.city} ${c.time}</span>`).join('');
+  if ($('clocks').innerHTML !== html) $('clocks').innerHTML = html;
+}
+tickClocks();
+setInterval(tickClocks, 1000);

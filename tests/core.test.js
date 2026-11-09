@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, worldClocks } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -205,4 +205,25 @@ test('주간업무 성격: 직접 고른 색 우선, 없으면 단어로 추측'
 test('주간업무 순서: 시간 있는 것 시간순 → 시간 없는 것 쓴 순서 (원래 번호 유지)', () => {
   const l = [{ t: 'A' }, { t: 'B 13:00' }, { t: 'C' }, { t: 'D 08:30' }];
   assert.deepEqual(weekSorted(l).map(x => x.i), [3, 1, 0, 2]);
+});
+test('주간업무 얇은 띠: 앞 두 글자 (영문·숫자는 좁으니 세 글자, 시간·공백 빼고)', () => {
+  assert.equal(weekShort('개발회의'), '개발');
+  assert.equal(weekShort('Reign 컨콜 09:30'), 'Rei');
+  assert.equal(weekShort('PO List 정리'), 'POL');
+  assert.equal(weekShort('LED OPO 송부'), 'LED');
+  assert.equal(weekShort('09:00 수요 업무'), '수요');
+  assert.equal(weekShort('A'), 'A');
+});
+
+test('worldClocks: 라스베가스·미네소타·뉴욕 현재 시각 (서머타임 자동 반영)', () => {
+  // 겨울(표준시): UTC 12:05 → 04:05 / 06:05 / 07:05
+  assert.deepEqual(worldClocks(new Date('2026-11-09T12:05:00Z')), [
+    { city: 'LV', name: '라스베가스', time: '04:05' },
+    { city: 'MN', name: '미네소타', time: '06:05' },
+    { city: 'NY', name: '뉴욕', time: '07:05' },
+  ]);
+  // 여름(서머타임): UTC 12:05 → 05:05 / 07:05 / 08:05
+  assert.deepEqual(worldClocks(new Date('2026-07-01T12:05:00Z')).map(c => c.time), ['05:05', '07:05', '08:05']);
+  // 자정은 24:00 이 아니라 00:00
+  assert.equal(worldClocks(new Date('2026-11-09T08:00:00Z'))[0].time, '00:00');
 });

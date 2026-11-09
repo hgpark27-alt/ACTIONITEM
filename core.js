@@ -212,3 +212,21 @@ export function weekSorted(list) {
   const r = list.map((x, i) => ({ ...x, i, time: weekSplit(x.t).time }));
   return [...r.filter(x => x.time).sort((a, b) => a.time.localeCompare(b.time) || a.i - b.i), ...r.filter(x => !x.time)];
 }
+// 얇은 띠에 보일 앞 글자: 한글 두 글자 폭만큼 (영문·숫자는 좁아서 세 글자)
+export function weekShort(t) {
+  let out = '', w = 0;
+  for (const ch of weekSplit(t).text.replace(/\s+/g, '')) {
+    const cw = /[ᄀ-￿]/.test(ch) ? 3 : 2;   // 한글 3 · 영문 2 (한글 두 글자 = 6)
+    if (w + cw > 6) break;
+    out += ch; w += cw;
+  }
+  return out;
+}
+
+/* 헤더 시계: 미국 지역 현재 시각 (서머타임은 시간대 이름으로 자동 반영) */
+const WORLD_CLOCKS = [['LV', '라스베가스', 'America/Los_Angeles'], ['MN', '미네소타', 'America/Chicago'], ['NY', '뉴욕', 'America/New_York']];
+export function worldClocks(now = new Date()) {
+  return WORLD_CLOCKS.map(([city, name, timeZone]) => ({
+    city, name, time: new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now),
+  }));
+}

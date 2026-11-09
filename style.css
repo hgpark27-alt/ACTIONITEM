@@ -320,18 +320,32 @@ html.host #note {
 }
 #noteText u { text-underline-offset: 3px; }
 
-/* 주간업무: 이름 오른쪽 버튼 → 위에서 스르륵 내려오는 칸 (높이 고정, 넘치면 칸 안에서 스크롤) */
-#weekBtn { margin-right: auto; border: none; padding: 4px 6px; font-size: 12px; color: var(--muted); }
+/* 주간업무: 평소엔 얇은 띠(색 점 + 앞 글자), 띠나 버튼 누르면 스르륵 펼쳐짐 (높이 고정, 넘치면 칸 안에서 스크롤) */
+#weekBtn { border: none; padding: 4px 6px; font-size: 12px; color: var(--muted); }
 #weekBtn:hover { color: var(--ink); }
 #weekBtn.on { color: var(--ink); background: var(--hover); }
+#clocks { margin-right: auto; font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#clocks span + span { margin-left: 7px; }
 :root { --w-meet: hsl(214 70% 56%); --w-prep: hsl(150 45% 42%); --w-send: hsl(28 88% 54%); --w-etc: #c4c7cc; }
 :root[data-theme=dark] { --w-meet: hsl(214 75% 66%); --w-prep: hsl(150 45% 55%); --w-send: hsl(28 85% 62%); --w-etc: #62666e; }
 #week {
   display: flex; gap: 6px;
-  height: 0; overflow: hidden; visibility: hidden; margin-bottom: 0;
-  transition: height .22s ease-out, margin-bottom .22s ease-out, visibility 0s .22s;
+  height: 24px; overflow: hidden; margin-bottom: 10px;
+  transition: height .22s ease-out, margin-bottom .22s ease-out;
 }
-#week.open { height: 184px; margin-bottom: 14px; visibility: visible; transition: height .22s ease-out, margin-bottom .22s ease-out; }
+#week.open { height: 184px; margin-bottom: 14px; }
+/* 얇은 띠: 요일 · 색 점 + 앞 두어 글자 가로로 */
+#week:not(.open) { cursor: pointer; }
+#week:not(.open) .wday { flex-direction: row; align-items: center; border-radius: 6px; padding: 0 5px; gap: 4px; }
+#week:not(.open) .wday b { padding: 0; font-size: 10.5px; }
+#week:not(.open) .wlist { display: flex; flex-wrap: wrap; align-content: flex-start; column-gap: 6px; height: 15px; padding: 0; overflow: hidden; }   /* 다 안 들어가는 건 통째로 숨김 */
+#week:not(.open) .wrow { flex: none; height: 15px; padding: 0; gap: 2px; border: none; font-size: 11px; cursor: pointer; }
+#week:not(.open) .wrow:hover { background: none; }
+#week:not(.open) .wdot { width: 6px; height: 6px; pointer-events: none; }
+.wsh, #week:not(.open) .wt, #week:not(.open) .wtime, #week:not(.open) .wadd, #week:not(.open) .editing { display: none; }
+#week:not(.open) .wsh { display: inline; }
+#week:not(.open):hover .wday { border-color: #c9ccd2; }
+#week:not(.open):hover .wday.today { border-color: var(--ink); }
 .wday {
   flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
@@ -370,4 +384,10 @@ html.host #note {
   #weekBtn { font-size: 13.5px; }
   .wrow, .win { font-size: 13px; }
   .wrow { height: 27px; }
+}
+/* 좁은 화면: 시계만 헤더 아랫줄로 */
+@media (max-width: 459px) {
+  header { position: relative; padding-bottom: 18px; }
+  #weekBtn { margin-right: auto; }
+  #clocks { position: absolute; left: 2px; bottom: 0; margin: 0; }
 }
