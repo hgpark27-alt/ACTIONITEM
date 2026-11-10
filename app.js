@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, WEEK_CATS, worldClocks } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, WEEK_CATS, worldClocks, redExpiry } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -63,6 +63,7 @@ function start() {
   itemsRef = ref(db, `u/${key}/items`);
   unsub = onValue(itemsRef, snap => {
     items = Object.entries(snap.val() || {}).map(([id, it]) => ({ id, ...it }));
+    expireRed();
     render();
   }, err => toast('DB 오류: ' + err.message));
   startNote();
@@ -88,6 +89,11 @@ function write(changes) {                     // changes: { id: {필드...} | nu
   return update(itemsRef, u);
 }
 const patch = (id, fields) => write({ [id]: fields });
+// 빨강 12시간 지나면 자동 해제 (되돌리기 기록 없이 바로 저장)
+function expireRed() {
+  const u = redExpiry(items);
+  if (itemsRef && Object.keys(u).length) update(itemsRef, u);
+}
 function undo() {
   const before = undoStack.pop();
   if (!before) return toast('되돌릴 작업 없음');
@@ -107,7 +113,7 @@ function addItems(texts, to) {
     const date = to ? (p.date || to.date || null) : p.date;
     if (to || p.date) {   // 바로 액션 아이템이 되는 경우만 빨강 (새 메모는 빨강 아님)
       if (!(date in lastOrder)) lastOrder[date] = Math.max(-1, ...items.filter(i => !i.memo && (i.date || null) === date).map(i => i.order ?? 0));
-      Object.assign(data, { changed: true, order: ++lastOrder[date] });
+      Object.assign(data, { changed: Date.now(), order: ++lastOrder[date] });
       if (date) data.date = date;
     } else Object.assign(data, { memo: true, order: memoTop - ps.length + k });
     ch[push(itemsRef).key] = { __new: data };
@@ -194,7 +200,7 @@ function editRow(li) {
       const p = parseQuickInput(v, today());
       const f = { category: p.category, title: p.title };
       if (p.date) Object.assign(f, { date: p.date, memo: null });   // 날짜를 적으면 그 날짜 액션 아이템으로
-      patch(it.id, { ...f, changed: true });
+      patch(it.id, { ...f, changed: Date.now() });
     }
     render();
   };
@@ -236,7 +242,7 @@ function catPop(btn, it) {
       ${tree.map(n => `<div class="node${n.path === it.category ? ' on' : ''}" data-path="${esc(n.path)}" style="padding-left:${8 + n.depth * 14}px">
         <i class="hue" style="--h:${catHue(n.name)}"></i><span>${esc(n.name)}</span><button class="ren" title="이름 변경">✎</button></div>`).join('')}
     </div>`, pop => {
-    const apply = path => { if (cleanPath(path) !== (it.category || '')) patch(it.id, { category: cleanPath(path), changed: true }); closePop(); };
+    const apply = path => { if (cleanPath(path) !== (it.category || '')) patch(it.id, { category: cleanPath(path), changed: Date.now() }); closePop(); };
     const inp = pop.querySelector('.catin');
     inp.focus(); inp.select();
     inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) apply(inp.value); if (e.key === 'Escape') closePop(); });
@@ -362,7 +368,7 @@ function startDrag(e, li, startY) {
     const id = li.dataset.id;
     if (chip) {
       chip.classList.remove('over');
-      if (chip.dataset.dropcat !== (byId(id).category || '')) patch(id, { category: chip.dataset.dropcat, changed: true });
+      if (chip.dataset.dropcat !== (byId(id).category || '')) patch(id, { category: chip.dataset.dropcat, changed: Date.now() });
       render();
       return;
     }
@@ -373,7 +379,7 @@ function startDrag(e, li, startY) {
     [...ul.querySelectorAll('.item')].forEach((x, i) => { ch[x.dataset.id] = { order: i }; });
     const prev = byId(id), newDate = toMemo ? null : (zone.dataset.date || null);
     Object.assign(ch[id], { memo: toMemo ? true : null, date: newDate });
-    if (!!prev.memo !== toMemo || (prev.date || null) !== newDate) ch[id].changed = true;   // 날짜·칸이 바뀌면 빨강 (순서만 바꾸면 그대로)
+    if (!!prev.memo !== toMemo || (prev.date || null) !== newDate) ch[id].changed = Date.now();   // 날짜·칸이 바뀌면 빨강 (순서만 바꾸면 그대로)
     write(ch);
     render();
   };
@@ -615,8 +621,8 @@ app.addEventListener('click', e => {
   const li = t.closest('.item');
   if (!li) return;
   const it = byId(li.dataset.id); if (!it) return;
-  if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now(), ...(it.memo ? {} : { changed: true }) });   // 액션 아이템 완료/해제도 변경(빨강)
-  if (t.closest('.mark')) return patch(it.id, { changed: it.changed ? null : true });   // 빨강 직접 켜기/끄기
+  if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now(), ...(it.memo ? {} : { changed: Date.now() }) });   // 액션 아이템 완료/해제도 변경(빨강)
+  if (t.closest('.mark')) return patch(it.id, { changed: it.changed ? null : Date.now() });   // 빨강 직접 켜기/끄기
   if (t.closest('.nocopy-dot')) return patch(it.id, { noCopy: it.noCopy ? null : true });   // 검은 점: 보고서 복사에서 제외
   if (t.closest('[data-a=del]')) return deleteItem(it);
   if (t.closest('[data-a=cat]')) return catPop(t.closest('[data-a=cat]'), it);
@@ -626,7 +632,7 @@ app.addEventListener('click', e => {
 app.addEventListener('change', e => {
   if (!e.target.matches('input[data-a=date]')) return;
   const li = e.target.closest('.item');
-  if (li) patch(li.dataset.id, { date: e.target.value || null, memo: null, changed: true });
+  if (li) patch(li.dataset.id, { date: e.target.value || null, memo: null, changed: Date.now() });
 });
 app.addEventListener('dblclick', e => {
   const li = e.target.closest('.item');
@@ -688,6 +694,7 @@ document.getElementById('unpin').onclick = () => pipWin && pipWin.close();
 // 자정이 지나면 "오늘" 기준 다시 계산
 let lastDay = today();
 setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); markWeekToday(); } }, 60000);
+setInterval(expireRed, 60000);
 // 편집·드래그 중 미뤄둔 화면 갱신 처리
 setInterval(() => { if (pending && !busy) render(); }, 300);
 

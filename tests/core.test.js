@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, worldClocks } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, worldClocks, redExpiry } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -239,4 +239,16 @@ test('보고서 복사: 검은 점(noCopy) 항목은 빠지고 번호는 이어�
   assert.equal(r.text, '[11월 3일]\n1. 첫째\n2. 둘째');
   assert.doesNotMatch(r.html, /제외/);
   assert.equal(buildReport([{ title: '제외', date: TODAY, noCopy: true }], TODAY).text, '');
+});
+
+test('빨강 12시간 휘발: 켠 지 12시간 지난 것만 끄고, 시각 없는 예전 빨강은 지금 시각으로 기록', () => {
+  const now = Date.parse('2026-11-10T12:00:00Z'), H = 3600000;
+  const items = [
+    { id: 'old', changed: now - 12 * H },
+    { id: 'fresh', changed: now - 12 * H + 1 },
+    { id: 'legacy', changed: true },
+    { id: 'none' },
+  ];
+  assert.deepEqual(redExpiry(items, now), { 'old/changed': null, 'legacy/changed': now });
+  assert.deepEqual(redExpiry([{ id: 'a', changed: now }], now), {});
 });

@@ -230,3 +230,14 @@ export function worldClocks(now = new Date()) {
     city, name, time: new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now),
   }));
 }
+
+/* 빨강(변경 표시)은 켠 지 12시간 지나면 자동으로 꺼짐. changed = 켠 시각(ms). 예전 true 는 지금부터 셈 */
+export const RED_TTL = 12 * 60 * 60 * 1000;
+export function redExpiry(items, now = Date.now()) {
+  const u = {};
+  for (const i of items) {
+    if (i.changed === true) u[`${i.id}/changed`] = now;
+    else if (typeof i.changed === 'number' && now - i.changed >= RED_TTL) u[`${i.id}/changed`] = null;
+  }
+  return u;
+}
