@@ -155,6 +155,11 @@ button.icon:hover { color: var(--ink); }
 /* 빨간 점 오른쪽 검은 점: 채워지면 보고서 복사에서 제외 */
 .nocopy-dot:hover::after { border-color: var(--ink); }
 .item.nocopy .nocopy-dot::after { background: var(--ink); border-color: var(--ink); }
+/* 주간업무에서 온 항목: 흐리게 + ↻, 수정·끌기·삭제 없음 (완료·복사 제외만) */
+.item.linked { cursor: default; }
+.item.linked .txt { opacity: .55; }
+.wkmark { margin-right: 5px; font-size: 11px; color: var(--muted); }
+.item.linked .mark::after { display: none; }
 .item.done .seg { background: #eef0f2; color: var(--faint); }
 .catchip { padding: 2px 3px 2px 4px; }
 .catchip .seg { margin-right: 1px; }
@@ -324,7 +329,6 @@ html.host #note {
 }
 #noteText u { text-underline-offset: 3px; }
 
-/* 주간업무: 평소엔 얇은 띠(색 점 + 앞 글자), 띠나 버튼 누르면 스르륵 펼쳐짐 (높이 고정, 넘치면 칸 안에서 스크롤) */
 #weekBtn { border: none; padding: 4px 6px; font-size: 12px; color: var(--muted); }
 #weekBtn:hover { color: var(--ink); }
 #weekBtn.on { color: var(--ink); background: var(--hover); }
@@ -332,62 +336,81 @@ html.host #note {
 #clocks span + span { margin-left: 7px; }
 :root { --w-meet: hsl(214 70% 56%); --w-prep: hsl(150 45% 42%); --w-send: hsl(28 88% 54%); --w-etc: #c4c7cc; }
 :root[data-theme=dark] { --w-meet: hsl(214 75% 66%); --w-prep: hsl(150 45% 55%); --w-send: hsl(28 85% 62%); --w-etc: #62666e; }
+/* 주간업무: 평소엔 이번 주 얇은 띠, 펼치면 이번 달 월~금 달력 (이번 주만 크게, 나머지 주는 색 점 + 앞 글자) */
 #week {
-  display: flex; gap: 6px;
+  display: flex; flex-direction: column; gap: 4px;
   height: 24px; overflow: hidden; margin-bottom: 10px;
   transition: height .22s ease-out, margin-bottom .22s ease-out;
 }
-#week.open { height: 184px; margin-bottom: 14px; }
-/* 얇은 띠: 요일 · 색 점 + 앞 두어 글자 가로로 */
-#week:not(.open) { cursor: pointer; }
-#week:not(.open) .wday { flex-direction: row; align-items: center; border-radius: 6px; padding: 0 5px; gap: 4px; }
-#week:not(.open) .wday b { padding: 0; font-size: 10.5px; }
-#week:not(.open) .wlist { display: flex; flex-wrap: wrap; align-content: flex-start; column-gap: 6px; height: 15px; padding: 0; overflow: hidden; }   /* 다 안 들어가는 건 통째로 숨김 */
-#week:not(.open) .wrow { flex: none; height: 15px; padding: 0; gap: 2px; border: none; font-size: 11px; cursor: pointer; }
-#week:not(.open) .wrow:hover { background: none; }
-#week:not(.open) .wdot { width: 6px; height: 6px; pointer-events: none; }
-.wsh, #week:not(.open) .wt, #week:not(.open) .wtime, #week:not(.open) .wadd, #week:not(.open) .editing { display: none; }
-#week:not(.open) .wsh { display: inline; }
-#week:not(.open):hover .wday { border-color: #c9ccd2; }
-#week:not(.open):hover .wday.today { border-color: var(--ink); }
-.wday {
-  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+#week.open { height: var(--wh, 240px); margin-bottom: 14px; }
+.whead, .wweek { flex: none; display: flex; gap: 6px; }
+.whead { height: 16px; }
+.whead span { flex: 1 1 0; min-width: 0; padding-left: 7px; font-size: 10.5px; color: var(--muted); }
+.wweek { height: 22px; }
+.wweek.cur { height: 118px; }
+#week:not(.open) .whead, #week:not(.open) .wweek:not(.cur) { display: none; }
+#week:not(.open) .wweek.cur { height: 24px; }
+.wcell {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 0 5px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
 }
-.wday.today { flex-grow: 1.45; border-color: var(--ink); }
-.wday b { font-size: 11px; color: var(--muted); padding: 5px 8px 3px; }
-.wday.today b { color: var(--ink); }
-.wlist { list-style: none; margin: 0; padding: 0 0 4px; flex: 1; min-height: 0; overflow-y: auto; }
-/* 업무 한 줄: 성격 색 점 · 시간 · 글 (길면 …) */
-.wrow {
-  display: flex; align-items: center; gap: 4px; padding: 0 6px; height: 23px;
-  border-bottom: 1px solid var(--line); font-size: 12px; cursor: text;
-}
-.wrow:hover { background: var(--hover); }
-.wdot {
-  flex: none; width: 7px; height: 7px; padding: 0; border: none; border-radius: 50%;
-  background: var(--w-etc); cursor: pointer;
-}
-.wdot:hover { background: var(--w-etc); box-shadow: 0 0 0 3px var(--hover); }
-.wrow[data-c=meet] .wdot { background: var(--w-meet); }
-.wrow[data-c=prep] .wdot { background: var(--w-prep); }
-.wrow[data-c=send] .wdot { background: var(--w-send); }
-.wtime { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: -0.2px; }
-.wt { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.wrow.editing { padding: 0 4px; }
-.win { width: 100%; font-size: 12px; border: none; border-bottom: 1px solid var(--ink); padding: 2px 3px; }
-.wadd { padding: 2px 8px; color: var(--faint); font-size: 13px; cursor: pointer; }
-.wadd:hover { color: var(--ink); }
+.wcell:hover { border-color: #c9ccd2; }
+.wcell.today, .wcell.today:hover { border-color: var(--ink); }
+.wcell.past { opacity: .55; }
+.wcell.out { opacity: .35; }
+.wcell b { flex: none; font-size: 10.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wcell.today b { color: var(--ink); }
+.wcell b i { font-style: normal; }
+#week.open .wcell b i, #week:not(.open) .wcell b span { display: none; }
+.wlist { flex: 1; min-width: 0; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-content: flex-start; column-gap: 6px; height: 15px; overflow: hidden; }   /* 다 안 들어가는 건 통째로 숨김 */
+.wrow { flex: none; display: flex; align-items: center; gap: 2px; height: 15px; font-size: 11px; }
+.wdot { flex: none; width: 6px; height: 6px; padding: 0; border: none; border-radius: 50%; background: var(--w-etc); }
+.wrow[data-c=meet] .wdot, .wprow[data-c=meet] .wdot { background: var(--w-meet); }
+.wrow[data-c=prep] .wdot, .wprow[data-c=prep] .wdot { background: var(--w-prep); }
+.wrow[data-c=send] .wdot, .wprow[data-c=send] .wdot { background: var(--w-send); }
+.wrow .wt, .wrow .wtime { display: none; }
+/* 이번 주(펼쳤을 때): 한 줄 = 업무 하나, 글 먼저 · 시간은 뒤에 작게 */
+#week.open .cur .wcell { flex-direction: column; align-items: stretch; gap: 0; padding: 0; }
+#week.open .cur .wcell b { padding: 4px 7px 2px; }
+#week.open .cur .wlist { display: block; height: auto; min-height: 0; overflow-y: auto; padding-bottom: 3px; }
+#week.open .cur .wrow { height: 21px; gap: 4px; padding: 0 6px; font-size: 12px; border-bottom: 1px solid var(--line); }
+#week.open .cur .wrow:last-child { border-bottom: none; }
+#week.open .cur .wdot { width: 7px; height: 7px; }
+#week.open .cur .wt { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#week.open .cur .wtime { display: inline; }
+#week.open .cur .wsh { display: none; }
+.wtime { flex: none; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; letter-spacing: -0.2px; }
+/* 날짜 누르면 뜨는 작은 창: 그날 업무 전부 + 추가·수정·반복 */
+.wpop { width: 260px; }
+.wp-h { font-size: 12px; font-weight: 700; padding: 3px 6px 6px; }
+.wpop ul { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
+.wprow { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 5px; font-size: 13px; cursor: text; }
+.wprow:hover { background: var(--hover); }
+#pop .wprow .wdot { flex: none; width: 8px; height: 8px; min-width: 0; padding: 0; border: none; border-radius: 50%; cursor: pointer; }
+.wprow .wdot:hover { box-shadow: 0 0 0 3px var(--line); }
+.wprow .wt { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wprow .wtime { font-size: 11.5px; }
+#pop .wcyc { flex: none; border: none; background: none; padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--faint); }
+#pop .wcyc:hover { color: var(--ink); background: none; }
+#pop .wcyc.on { color: var(--ink); background: var(--hover); }
+.wprow.editing { padding: 0 4px 0 6px; }
+.wprow.editing:hover { background: none; }
+.win { flex: 1; min-width: 0; font-size: 13px; border: none; border-bottom: 1px solid var(--ink); padding: 2px 3px; background: none; color: var(--ink); }
+.win::placeholder { color: var(--faint); }
+.wpadd { padding: 4px 8px; color: var(--faint); font-size: 14px; cursor: pointer; }
+.wpadd:hover { color: var(--ink); }
 @media (max-width: 460px) {
-  #week { gap: 4px; }
-  .wday b { padding: 4px 5px 3px; }
-  .wrow { padding: 0 4px; gap: 3px; }
-  .wtime { display: none; }
+  .whead, .wweek, #week { gap: 4px; }
+  .wcell { padding: 0 4px; }
+  #week.open .cur .wrow { padding: 0 4px; gap: 3px; }
+  #week.open .cur .wtime { display: none; }   /* 좁으면 칸에선 시간 빼고 글만 (작은 창엔 보임) */
 }
 @media (hover: none), (pointer: coarse) {
   #weekBtn { font-size: 13.5px; }
-  .wrow, .win { font-size: 13px; }
-  .wrow { height: 27px; }
+  #week.open .cur .wrow { font-size: 13px; height: 24px; }
+  .wprow { height: 34px; font-size: 14.5px; }
+  .win { font-size: 16px; }
+  #pop .wcyc { font-size: 12.5px; padding: 3px 7px; }
 }
 /* 좁은 화면: 시계만 헤더 아랫줄로 */
 @media (max-width: 459px) {

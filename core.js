@@ -56,6 +56,8 @@ const uniq = arr => [...new Set(arr)];
 // 카테고리 칩: 최근에 쓴 순서
 export const categoryList = items =>
   uniq([...items].sort(byRecent).map(i => i.category).filter(Boolean));
+// 분류 고르는 창·끌어다 놓을 곳에는 최근 쓴 것만
+export const recentCategories = (items, n = 10) => categoryList(items).slice(0, n);
 
 // 분류 단어 → 고유 색상(hue 0~359). 같은 단어는 어느 기기에서든 같은 색
 export function catHue(word) {
@@ -181,10 +183,16 @@ export function textToNoteHtml(text) {
 }
 
 /* ---------- 주간업무 (월~금 반복 업무) ---------- */
-// 저장 형식: 요일마다 [{t: 글, c: 직접 고른 성격(없으면 단어로 추측)}]. 예전 줄글도 읽음
+// 저장 형식: 요일마다 [{t: 글, c: 직접 고른 성격(없으면 단어로 추측), r: 반복, a: 반복 기준 날짜}]. 예전 줄글도 읽음
 const TIME_RE = /(?:^|\s)([01]?\d|2[0-3]):([0-5]\d)(?=\s|$)/;
+const TIME_KO = /(?:^|\s)([01]?\d|2[0-3])시(?:\s*(반|[0-5]?\d분))?(?=\s|$)/;   // 9시 · 9시반 · 9시 30분
 export function weekList(v) {
-  if (Array.isArray(v)) return v.filter(x => x && String(x.t || '').trim()).map(x => (x.c ? { t: x.t, c: x.c } : { t: x.t }));
+  if (Array.isArray(v)) return v.filter(x => x && String(x.t || '').trim()).map(x => {
+    const o = x.id ? { id: x.id, t: x.t } : { t: x.t };
+    if (x.c) o.c = x.c;
+    if (x.r && x.a) { o.r = x.r; o.a = x.a; }
+    return o;
+  });
   const out = [];
   for (const raw of String(v || '').split(/\r?\n/)) {
     const l = raw.trim();
@@ -195,9 +203,51 @@ export function weekList(v) {
   return out;
 }
 export function weekSplit(t) {
+  const strip = re => String(t).replace(re, ' ').replace(/\s+/g, ' ').trim();
   const m = String(t).match(TIME_RE);
-  if (!m) return { time: '', text: String(t).trim() };
-  return { time: m[1].padStart(2, '0') + ':' + m[2], text: String(t).replace(TIME_RE, ' ').replace(/\s+/g, ' ').trim() };
+  if (m) return { time: m[1].padStart(2, '0') + ':' + m[2], text: strip(TIME_RE) };
+  const k = String(t).match(TIME_KO);
+  if (k) return { time: k[1].padStart(2, '0') + ':' + (k[2] === '반' ? '30' : k[2] ? k[2].replace('분', '').padStart(2, '0') : '00'), text: strip(TIME_KO) };
+  return { time: '', text: String(t).trim() };
+}
+// 줄 끝에 붙는 짧은 시간: 09:30 → 9:30
+export const weekTimeShort = time => time.replace(/^0(\d)/, '$1');
+
+/* 반복: r 없음 = 매주 · '2w' = 격주(기준 날짜 a 의 주부터 2주마다) · 'm' = 매월 a 와 같은 n째 요일 · 'ml' = 매월 마지막 그 요일 */
+const DAY = 86400000;
+const utcOf = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+const isoOf = ms => new Date(ms).toISOString().slice(0, 10);
+const lastDay = d => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7), 0)).getUTCDate();
+const nth = d => Math.ceil(+d.slice(8, 10) / 7);
+const NTH = ['', '첫째', '둘째', '셋째', '넷째'];
+export function weekOccurs(it, date) {
+  if (!it.r || !it.a) return true;
+  if (it.r === '2w') return Math.round((utcOf(date) - utcOf(it.a)) / DAY / 7) % 2 === 0;
+  if (it.r === 'm') return nth(date) === nth(it.a);
+  if (it.r === 'ml') return +date.slice(8, 10) + 7 > lastDay(date);
+  return true;
+}
+// 그날 기준으로 고를 수 있는 반복 (다섯째 주는 "마지막"만)
+export function weekCycles(date) {
+  const n = nth(date);
+  return [{ r: '', label: '매주' }, { r: '2w', label: '격주' },
+    ...(n <= 4 ? [{ r: 'm', label: '매월 ' + NTH[n] }] : []), { r: 'ml', label: '매월 마지막' }];
+}
+export function weekCycleLabel(it) {
+  if (!it.r || !it.a) return '매주';
+  if (it.r === '2w') return '격주';
+  if (it.r === 'm') return '매월 ' + NTH[nth(it.a)];
+  return '매월 마지막';
+}
+// 그 달의 월~금 주들 (1일이 주말이면 다음 주부터, 말일이 든 주까지)
+export function monthWeeks(date) {
+  const first = date.slice(0, 8) + '01', f = utcOf(first);
+  let mon = f - ((new Date(f).getUTCDay() + 6) % 7) * DAY;
+  if (mon + 4 * DAY < f) mon += 7 * DAY;
+  const end = utcOf(date.slice(0, 8) + String(lastDay(date)).padStart(2, '0'));
+  const out = [];
+  for (; mon <= end; mon += 7 * DAY) out.push([0, 1, 2, 3, 4].map(i => isoOf(mon + i * DAY)));
+  return out;
 }
 export const WEEK_CATS = ['meet', 'prep', 'send', 'etc'];
 export function weekCat(it) {
@@ -239,5 +289,42 @@ export function redExpiry(items, now = Date.now()) {
     if (i.changed === true) u[`${i.id}/changed`] = now;
     else if (typeof i.changed === 'number' && now - i.changed >= RED_TTL) u[`${i.id}/changed`] = null;
   }
+  return u;
+}
+
+// 주간업무 → 액션 아이템으로 보낼 것: 오늘부터 7일 안(월~금), 반복이 맞는 날. 글은 "업무 9:30" (시간 뒤로)
+const WEEK_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+export function weekDue(week, today, days = 7) {
+  const out = [];
+  for (let k = 0; k < days; k++) {
+    const date = isoOf(utcOf(today) + k * DAY), wd = new Date(utcOf(date)).getUTCDay();
+    if (wd === 0 || wd === 6) continue;
+    for (const x of weekSorted(week[WEEK_KEYS[wd - 1]] || [])) {
+      if (!x.id || !weekOccurs(x, date)) continue;
+      const s = weekSplit(x.t);
+      out.push({ date, id: x.id, title: s.time ? s.text + ' ' + weekTimeShort(s.time) : s.text });
+    }
+  }
+  return out;
+}
+// 주간업무 → 액션 아이템 연동 계획 (위 달력이 원본, 아래는 따라감). update() 에 그대로 넣는 값
+// · 7일 안 업무: 없으면 만듦(번호 = wk-날짜-업무번호 라 PC·폰이 같이 해도 하나), 글 바뀌면 따라 바꿈
+// · 7일 안인데 위에서 빠진 것: 지움 (완료한 건 남김) · 지난 날짜는 그대로
+// · 예전 버전이 복사해 둔 같은 날짜·같은 글(연동 표시 없음)은 정리
+export function weekSyncPlan(week, items, today, now = Date.now()) {
+  const u = {}, byKey = new Map(items.map(i => [i.id, i]));
+  const end = isoOf(utcOf(today) + 6 * DAY), want = new Set(), lastOrder = {};
+  const nextOrder = date => {
+    if (!(date in lastOrder)) lastOrder[date] = Math.max(-1, ...items.filter(i => !i.memo && i.date === date).map(i => i.order ?? 0));
+    return ++lastOrder[date];
+  };
+  for (const x of weekDue(week, today)) {
+    const k = `wk-${x.date}-${x.id}`, cur = byKey.get(k);
+    want.add(k);
+    if (cur) { if (cur.title !== x.title) u[`${k}/title`] = x.title; continue; }
+    for (const i of items) if (!i.wk && !i.memo && !i.category && i.date === x.date && i.title === x.title) u[i.id] = null;
+    u[k] = { category: '', title: x.title, date: x.date, done: false, wk: x.id, order: nextOrder(x.date), createdAt: now, updatedAt: now };
+  }
+  for (const i of items) if (i.wk && !i.done && i.date >= today && i.date <= end && !want.has(i.id)) u[i.id] = null;
   return u;
 }

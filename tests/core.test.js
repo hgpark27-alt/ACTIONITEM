@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuickInput, dateLabel, visibleItems, groupByDate, buildReport,
-  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, worldClocks, redExpiry } from '../core.js';
+  normalizeName, nameToKey, categoryList, categoryTree, renameCategory, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, worldClocks, redExpiry, weekOccurs, weekCycles, weekCycleLabel, monthWeeks, weekTimeShort, weekDue, recentCategories, weekSyncPlan } from '../core.js';
 
 const TODAY = '2026-11-03';
 
@@ -251,4 +251,83 @@ test('빨강 12시간 휘발: 켠 지 12시간 지난 것만 끄고, 시각 없�
   ];
   assert.deepEqual(redExpiry(items, now), { 'old/changed': null, 'legacy/changed': now });
   assert.deepEqual(redExpiry([{ id: 'a', changed: now }], now), {});
+});
+
+test('주간업무 반복: 매주 / 격주(기준 주부터 2주마다) / 매월 n째 / 매월 마지막', () => {
+  assert.equal(weekOccurs({ t: 'a' }, '2026-11-24'), true);
+  const bi = { t: 'a', r: '2w', a: '2026-11-10' };   // 화요일 기준
+  assert.deepEqual(['2026-11-03', '2026-11-10', '2026-11-17', '2026-11-24', '2026-10-27'].map(d => weekOccurs(bi, d)), [false, true, false, true, true]);
+  const m2 = { t: 'a', r: 'm', a: '2026-11-10' };    // 11/10 = 둘째 화요일
+  assert.deepEqual(['2026-11-03', '2026-11-10', '2026-12-08', '2026-12-01'].map(d => weekOccurs(m2, d)), [false, true, true, false]);
+  const ml = { t: 'a', r: 'ml', a: '2026-11-24' };   // 마지막 화요일
+  assert.deepEqual(['2026-11-24', '2026-11-17', '2026-12-29', '2026-12-22'].map(d => weekOccurs(ml, d)), [true, false, true, false]);
+});
+test('주간업무 반복 선택지와 이름: 그날 기준 (다섯째 주면 "마지막"만)', () => {
+  assert.deepEqual(weekCycles('2026-11-10').map(c => c.label), ['매주', '격주', '매월 둘째', '매월 마지막']);
+  assert.deepEqual(weekCycles('2026-12-29').map(c => c.r), ['', '2w', 'ml']);
+  assert.equal(weekCycleLabel({ t: 'a' }), '매주');
+  assert.equal(weekCycleLabel({ t: 'a', r: '2w', a: '2026-11-10' }), '격주');
+  assert.equal(weekCycleLabel({ t: 'a', r: 'm', a: '2026-11-03' }), '매월 첫째');
+  assert.equal(weekCycleLabel({ t: 'a', r: 'ml', a: '2026-11-24' }), '매월 마지막');
+});
+test('weekList: 반복 정보(r, a) 유지, 짝이 안 맞으면 매주로', () => {
+  assert.deepEqual(weekList([{ t: 'a', r: '2w', a: '2026-11-10' }, { t: 'b', r: '2w' }]), [{ t: 'a', r: '2w', a: '2026-11-10' }, { t: 'b' }]);
+});
+test('이번 달 달력 주(월~금): 1일이 주말이면 다음 주부터, 말일 주까지', () => {
+  const w = monthWeeks('2026-11-26');   // 11/1 = 일요일
+  assert.deepEqual(w.map(x => x[0]), ['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30']);
+  assert.deepEqual(w[4], ['2026-11-30', '2026-12-01', '2026-12-02', '2026-12-03', '2026-12-04']);
+  assert.deepEqual(monthWeeks('2026-10-15').map(x => x[0]), ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26']);
+});
+test('주간업무 시간: 9:30 · 9시반 · 14시 · 9시 30분 모두 인식, 보이는 건 뒤에 짧게', () => {
+  assert.deepEqual(weekSplit('9시반 Reign 컨콜'), { time: '09:30', text: 'Reign 컨콜' });
+  assert.deepEqual(weekSplit('개발회의 14시'), { time: '14:00', text: '개발회의' });
+  assert.deepEqual(weekSplit('OPO 9시 30분 송부'), { time: '09:30', text: 'OPO 송부' });
+  assert.deepEqual(weekSplit('3시간 작업'), { time: '', text: '3시간 작업' });
+  assert.equal(weekTimeShort('09:30'), '9:30');
+  assert.equal(weekTimeShort('14:00'), '14:00');
+});
+
+test('주간업무 → 액션 아이템 전송 대상: 오늘부터 7일(주말 제외), 반복 맞는 날만, 글은 시간 뒤로', () => {
+  const week = {
+    mon: [{ id: 'm1', t: '9시반 개발회의' }],
+    tue: [{ id: 't1', t: 'OPO 송부', r: '2w', a: '2026-11-24' }],
+    fri: [{ id: 'f1', t: '주간보고', r: 'ml', a: '2026-11-27' }, { t: '번호없음' }],
+  };
+  assert.deepEqual(weekDue(week, '2026-11-26'), [   // 목요일: 11/26 ~ 12/2
+    { date: '2026-11-27', id: 'f1', title: '주간보고' },
+    { date: '2026-11-30', id: 'm1', title: '개발회의 9:30' },
+  ]);
+  assert.deepEqual(weekDue(week, '2026-12-07').map(x => x.date + x.id), ['2026-12-07m1', '2026-12-08t1']);
+});
+test('weekList: 업무 고유 번호(id) 유지', () => {
+  assert.deepEqual(weekList([{ id: 'x', t: 'a' }]), [{ id: 'x', t: 'a' }]);
+});
+test('분류: 최근 쓴 것 10개만', () => {
+  const items = Array.from({ length: 13 }, (_, k) => ({ category: 'C' + k, updatedAt: k }));
+  assert.deepEqual(recentCategories(items), ['C12', 'C11', 'C10', 'C9', 'C8', 'C7', 'C6', 'C5', 'C4', 'C3']);
+});
+
+test('주간업무 ↔ 액션 아이템 연동: 만들기 · 글 바뀌면 따라 바꾸기 · 빠지면 지우기(완료한 건 남김) · 예전 복사본 정리', () => {
+  const week = { thu: [{ id: 'r1', t: 'Reign 컨콜 9:30' }], fri: [{ id: 'r2', t: '주간보고' }] };
+  const T = '2026-11-26';
+  const items = [
+    { id: 'a', title: '다른 일', date: '2026-11-27', order: 4 },
+    { id: 'wk-2026-11-26-r1', wk: 'r1', title: 'Reign 컨콜 09:00', date: T, order: 0 },          // 글 바뀜 → 따라감
+    { id: 'wk-2026-11-26-gone', wk: 'gone', title: '없어진 업무', date: T, order: 1 },           // 위에서 지움 → 삭제
+    { id: 'wk-2026-11-26-done', wk: 'done', title: '끝낸 업무', date: T, order: 2, done: true }, // 완료 → 남김
+    { id: 'wk-2026-11-20-old', wk: 'old', title: '지난주', date: '2026-11-20', order: 0 },       // 지난 날짜 → 그대로
+    { id: 'legacy', title: '주간보고', category: '', date: '2026-11-27', order: 5 },              // 예전 버전 복사본 → 정리
+  ];
+  const u = weekSyncPlan(week, items, T, 1000);
+  assert.deepEqual(u, {
+    'wk-2026-11-26-r1/title': 'Reign 컨콜 9:30',
+    'wk-2026-11-27-r2': { category: '', title: '주간보고', date: '2026-11-27', done: false, wk: 'r2', order: 6, createdAt: 1000, updatedAt: 1000 },
+    'wk-2026-11-26-gone': null,
+    'legacy': null,
+  });
+  // 한 번 반영한 뒤엔 바꿀 것 없음 (PC·폰이 같이 돌려도 같은 결과)
+  const after = items.filter(i => !['wk-2026-11-26-gone', 'legacy'].includes(i.id)).map(i => i.id === 'wk-2026-11-26-r1' ? { ...i, title: 'Reign 컨콜 9:30' } : i)
+    .concat([{ id: 'wk-2026-11-27-r2', wk: 'r2', title: '주간보고', date: '2026-11-27' }]);
+  assert.deepEqual(weekSyncPlan(week, after, T, 2000), {});
 });

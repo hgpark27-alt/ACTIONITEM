@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getDatabase, ref, onValue, push, update, get, set } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 import { firebaseConfig } from './firebase-config.js';
 import { ymd, parseQuickInput, dateLabel, fullTitle, visibleItems, groupByDate, buildReport,
-  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, WEEK_CATS, worldClocks, redExpiry } from './core.js';
+  nameToKey, categoryList, categoryTree, renameCategory, cleanPath, catHue, toCSV, noteLines, cleanNoteHtml, textToNoteHtml, noteHtmlToText, weekList, weekSplit, weekCat, weekSorted, weekShort, WEEK_CATS, worldClocks, redExpiry, weekOccurs, weekCycles, weekCycleLabel, monthWeeks, weekTimeShort, recentCategories, weekSyncPlan } from './core.js';
 
 const db = getDatabase(initializeApp(firebaseConfig));
 const app = document.getElementById('app');
@@ -64,6 +64,7 @@ function start() {
   unsub = onValue(itemsRef, snap => {
     items = Object.entries(snap.val() || {}).map(([id, it]) => ({ id, ...it }));
     expireRed();
+    itemsReady = true; syncWeek();
     render();
   }, err => toast('DB 오류: ' + err.message));
   startNote();
@@ -164,6 +165,12 @@ function render() {
 }
 function row(i) {
   const cat = i.category ? `<span class="cat">${catHtml(i.category)}</span>` : '';
+  if (i.wk) return `<li class="item linked${i.done ? ' done' : ''}${i.noCopy ? ' nocopy' : ''}" data-id="${i.id}" title="주간업무에서 자동 · 위 달력에서 수정">
+    <button class="chk" title="완료"></button>
+    <div class="txt"><span class="wkmark">↻</span><span class="title">${esc(i.title)}</span></div>
+    <span class="mark"></span>
+    <button class="nocopy-dot" title="보고서 복사에서 제외"></button>
+  </li>`;   // 주간업무에서 온 것: 흐리게, 완료·복사 제외만 가능
   return `<li class="item${i.done ? ' done' : ''}${i.memo ? ' memo' : ''}${i.changed ? ' changed' : ''}${i.noCopy ? ' nocopy' : ''}" data-id="${i.id}">
     <button class="chk" title="완료"></button>
     <div class="txt">${cat}<span class="title">${esc(i.title)}</span></div>
@@ -179,7 +186,7 @@ function row(i) {
 // 끄는 동안 화면 아래에 뜨는 놓을 곳
 function renderChips() {
   $('catChips').innerHTML = '<span class="chip" data-dropcat="">없음</span>' +
-    categoryList(items).map(c => `<span class="chip catchip" data-dropcat="${esc(c)}">${catHtml(c)}</span>`).join('');
+    recentCategories(items).map(c => `<span class="chip catchip" data-dropcat="${esc(c)}">${catHtml(c)}</span>`).join('');
 }
 
 /* ---------- 더블클릭 수정 ---------- */
@@ -234,7 +241,8 @@ document.addEventListener('pointerdown', closePopOutside);
 
 // 분류: 직접 입력(">"로 단계) 또는 목록에서 고르기, ✎로 이름 변경(하위 분류·모든 항목 함께)
 function catPop(btn, it) {
-  const tree = categoryTree(items);
+  const keep = new Set([...recentCategories(items), it.category || '']);   // 최근 쓴 분류 10개 (+ 지금 분류)
+  const tree = categoryTree(items.filter(i => keep.has(i.category || '')));
   openPop(btn, `
     <input class="catin" value="${esc(it.category || '')}" placeholder="대분류 > 중분류 > 소분류">
     <div class="tree">
@@ -303,7 +311,7 @@ function logout() {
   localStorage.removeItem('ai-key'); localStorage.removeItem('ai-name'); key = name = null;
   if (unsub) { unsub(); unsub = null; } items = [];
   if (noteUnsub) { noteUnsub(); noteUnsub = null; } $('noteText').innerHTML = '';
-  if (weekUnsub) { weekUnsub(); weekUnsub = null; } week = {}; weekEdit = null; WDAYS.forEach(renderWeekDay);
+  if (weekUnsub) { weekUnsub(); weekUnsub = null; } week = {}; renderWeek(); itemsReady = weekReady = false;
   showLogin();
 }
 
@@ -443,67 +451,149 @@ async function togglePin() {
   $('quick').focus();
 }
 
-/* ---------- 주간업무 (월~금 반복 업무, 위에서 내려오는 칸) ---------- */
-// u/{key}/week/{mon..fri} = [{t: 글, c: 직접 고른 성격}]. 한 줄 = 업무 하나, 시간 있으면 시간순
+/* ---------- 주간업무 (이번 달 월~금 달력: 이번 주만 크게, 날짜 누르면 작은 창) ---------- */
+// u/{key}/week/{mon..fri} = [{t: 글, c: 성격, r: 반복, a: 반복 기준 날짜}]. 한 줄 = 업무 하나, 시간 있으면 시간순
 let weekUnsub = null;
 let week = {};              // 요일 → 업무 목록
-let weekEdit = null;        // 고치는 중 {d, i} (i = -1 이면 새로 추가)
+let wpop = null;            // 열린 작은 창 {date, edit: 고치는 줄 번호(-1 = 새 줄), cyc: 새 줄 반복, draft: 새 줄 쓰던 글}
+let wpDown = false, wpRendering = false;   // 다시 그리는 중 입력칸이 빠지는 건 "바깥 누름" 아님         // 창 안을 누르는 중 (그 사이 저장해도 화면은 클릭 처리 뒤에 다시 그림)
 const WDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+const WD_KO = ['월', '화', '수', '목', '금'];
+const wdOf = date => WDAYS[(new Date(date + 'T00:00').getDay() + 6) % 7];
+const plusDays = (date, n) => ymd(new Date(new Date(date + 'T00:00').getTime() + n * 864e5));
 function startWeek() {
   if (weekUnsub) weekUnsub();
   weekUnsub = onValue(ref(db, `u/${key}/week`), snap => {
     const v = snap.val() || {};
-    WDAYS.forEach(d => { week[d] = weekList(v[d]); if (!weekEdit || weekEdit.d !== d) renderWeekDay(d); });   // 쓰는 중인 칸은 덮어쓰지 않음
+    WDAYS.forEach(d => { week[d] = weekList(v[d]); });
+    // 번호 없는 예전 업무엔 고유 번호 (요일+글로 정해서 PC·폰이 같이 붙여도 같은 번호)
+    WDAYS.forEach(d => { if (week[d].some(x => !x.id)) saveWeekDay(d, week[d].map(x => x.id ? x : { id: d + hashText(x.t), ...x })); });
+    weekReady = true; syncWeek();
+    renderWeek();
+    if (wpop && wpop.edit === null) renderWpop();   // 쓰는 중엔 덮어쓰지 않음
   });
-  markWeekToday();
   setWeekOpen(localStorage.getItem('ai-week') === '1');
 }
-function renderWeekDay(d) {
-  const ul = app.querySelector(`#week .wday[data-d=${d}] .wlist`);
-  const e = weekEdit && weekEdit.d === d ? weekEdit : null;
-  const inp = v => `<li class="wrow editing"><input class="win" value="${esc(v)}" autocomplete="off" spellcheck="false"></li>`;
-  ul.innerHTML = weekSorted(week[d] || []).map(x => {
-    if (e && e.i === x.i) return inp(x.t);
-    const s = weekSplit(x.t), c = weekCat(x);
-    return `<li class="wrow" data-i="${x.i}" data-c="${c}" title="${esc(x.t)}"><button class="wdot"></button>${s.time ? `<span class="wtime">${s.time}</span>` : ''}<span class="wt">${esc(s.text)}</span><span class="wsh">${esc(weekShort(x.t))}</span></li>`;
-  }).join('') + (e && e.i < 0 ? inp('') : '<li class="wadd">+</li>');
-  const i = ul.querySelector('.win');
-  if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); i.scrollIntoView({ block: 'nearest' }); }
+// 그날 하는 업무 (반복 맞는 것만, 시간순)
+const dayItems = date => weekSorted(week[wdOf(date)] || []).filter(x => weekOccurs(x, date));
+function wrowHtml(x) {
+  const s = weekSplit(x.t);
+  return `<li class="wrow" data-c="${weekCat(x)}" title="${esc(x.t)}"><span class="wdot"></span><span class="wt">${esc(s.text)}</span>${s.time ? `<span class="wtime">${weekTimeShort(s.time)}</span>` : ''}<span class="wsh">${esc(weekShort(x.t))}</span></li>`;
 }
-function editWeek(d, i) {
-  if (weekEdit) { const o = weekEdit; weekEdit = null; renderWeekDay(o.d); }
-  weekEdit = { d, i };
-  renderWeekDay(d);
-}
-// Enter·바깥 누름 = 저장 / 비우면 삭제 / 새 줄은 Enter 치면 다음 줄 바로 이어서
-function commitWeek(input, more) {
-  const e = weekEdit;
-  if (!e || !input.isConnected) return;
-  weekEdit = null;
-  const v = input.value.trim(), list = [...(week[e.d] || [])];
-  if (e.i < 0) { if (v) list.push({ t: v }); }
-  else if (!v) list.splice(e.i, 1);
-  else if (v !== list[e.i].t) list[e.i] = { ...list[e.i], t: v };
-  week[e.d] = list;
-  if (key) set(ref(db, `u/${key}/week/${e.d}`), list.length ? list : null);
-  if (more && e.i < 0 && v) editWeek(e.d, -1); else renderWeekDay(e.d);
-}
-function cycleWeekCat(d, i) {
-  const list = [...(week[d] || [])], it = list[i];
-  list[i] = { ...it, c: WEEK_CATS[(WEEK_CATS.indexOf(weekCat(it)) + 1) % WEEK_CATS.length] };
-  week[d] = list;
-  renderWeekDay(d);
-  if (key) set(ref(db, `u/${key}/week/${d}`), list);
-}
-// 오늘 요일 칸 테두리 (주말엔 없음)
-function markWeekToday() {
-  const d = ['', 'mon', 'tue', 'wed', 'thu', 'fri', ''][new Date().getDay()];
-  app.querySelectorAll('#week .wday').forEach(c => c.classList.toggle('today', !!d && c.dataset.d === d));
+function renderWeek() {
+  const el = $('week'), t = today(), weeks = monthWeeks(t);
+  let cur = weeks.findIndex(w => t < plusDays(w[0], 7));
+  if (cur < 0) cur = weeks.length - 1;
+  const mon = t.slice(0, 7);
+  el.innerHTML = `<div class="whead">${WD_KO.map(d => `<span>${d}</span>`).join('')}</div>` + weeks.map((w, wi) =>
+    `<div class="wweek${wi === cur ? ' cur' : ''}">${w.map((date, i) => {
+      const cls = (date === t ? ' today' : '') + (date < t ? ' past' : '') + (date.slice(0, 7) !== mon ? ' out' : '');
+      return `<div class="wcell${cls}" data-date="${date}"><b><i>${WD_KO[i]}</i><span>${+date.slice(8)}</span></b><ul class="wlist">${dayItems(date).map(wrowHtml).join('')}</ul></div>`;
+    }).join('')}</div>`).join('');
+  el.style.setProperty('--wh', (20 + 118 + (weeks.length - 1) * 26) + 'px');   // 머리 + 이번 주 + 나머지 주
 }
 function setWeekOpen(on) {
   localStorage.setItem('ai-week', on ? '1' : '0');
   $('week').classList.toggle('open', on);
   $('weekBtn').classList.toggle('on', on);
+  if (!on && wpop) closePop();
+}
+const hashText = t => { let h = 2166136261; for (const ch of t) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+const markWeekToday = renderWeek;   // 자정 지나면 오늘·이번 주 다시 계산
+
+// 주간업무 → 액션 아이템 연동: 위 달력이 원본, 아래 액션 아이템은 7일 안의 것만 따라감 (아래에선 수정 불가)
+// 켤 때 · 주간업무나 액션 아이템이 바뀔 때 · 날짜 바뀔 때 맞춤. 번호가 정해져 있어 PC·폰이 같이 해도 하나만
+let itemsReady = false, weekReady = false, legacyCleaned = false;
+function syncWeek() {
+  if (!key || !itemsReady || !weekReady) return;
+  const u = weekSyncPlan(week, items, today());
+  if (Object.keys(u).length) update(itemsRef, u);
+  if (!legacyCleaned) { legacyCleaned = true; set(ref(db, `u/${key}/weekSent`), null); }   // 예전 방식의 보낸 기록은 이제 안 씀
+}
+
+// 날짜 누르면 그날 업무 전부 보이는 작은 창: 추가·수정·삭제·성격·반복
+function openWpop(cell) {
+  const date = cell.dataset.date;
+  openPop(cell, '<div class="wpop"></div>', pop => {
+    wpop = { date, edit: -1, cyc: '', draft: '' };
+    const box = pop.querySelector('.wpop');
+    box.addEventListener('click', wpopClick);
+    box.addEventListener('keydown', wpopKey);
+    box.addEventListener('focusout', e => { if (!wpRendering && e.target.classList.contains('win')) wpopCommit(e.target, false, wpDown); });
+    box.addEventListener('pointerdown', e => {
+      wpDown = true;
+      if (e.target.closest('.new .wcyc')) e.preventDefault();   // 새 줄 반복 고를 땐 입력칸 그대로
+    });
+    renderWpop();
+  });
+}
+function renderWpop() {
+  const box = !$('pop').hidden && $('pop').querySelector('.wpop');
+  if (!box || !wpop) { wpop = null; return; }
+  const { date, edit } = wpop, d = new Date(date + 'T00:00');
+  const cyc = r => weekCycles(date).find(c => c.r === r) || weekCycles(date)[0];
+  const inp = (v, ph = '') => `<input class="win" value="${esc(v)}" placeholder="${ph}" autocomplete="off" spellcheck="false">`;
+  wpRendering = true;
+  box.innerHTML = `<div class="wp-h">${d.getMonth() + 1}월 ${d.getDate()}일 (${WD_KO[(d.getDay() + 6) % 7]})</div><ul>` +
+    dayItems(date).map(x => {
+      if (edit === x.i) return `<li class="wprow editing" data-i="${x.i}">${inp(x.t)}</li>`;
+      const s = weekSplit(x.t);
+      return `<li class="wprow" data-i="${x.i}" data-c="${weekCat(x)}"><button class="wdot" title="성격"></button><span class="wt">${esc(s.text)}</span>${s.time ? `<span class="wtime">${weekTimeShort(s.time)}</span>` : ''}<button class="wcyc${x.r ? ' on' : ''}" title="반복">${weekCycleLabel(x)}</button></li>`;
+    }).join('') +
+    (edit === -1 ? `<li class="wprow editing new">${inp(wpop.draft, '+ 추가')}<button class="wcyc${wpop.cyc ? ' on' : ''}" title="반복">${cyc(wpop.cyc).label}</button></li>` : '<li class="wpadd">+</li>') + '</ul>';
+  wpRendering = false;
+  const i = box.querySelector('.win');
+  if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+const nextCyc = (date, r) => { const cs = weekCycles(date), k = cs.findIndex(c => c.r === (r || '')); return cs[(k + 1) % cs.length].r; };
+function saveWeekDay(d, list) {
+  week[d] = list;
+  if (key) set(ref(db, `u/${key}/week/${d}`), list.length ? list : null);
+  renderWeek();
+}
+function withCyc(it, r, date) {
+  const o = { ...it }; delete o.r; delete o.a;
+  return r ? { ...o, r, a: date } : o;
+}
+// Enter·바깥 누름 = 저장 / 비우면 삭제 / 새 줄은 Enter 치면 다음 줄 바로 이어서
+function wpopCommit(input, more, later) {
+  if (!wpop || wpop.edit === null || !input.isConnected) return;
+  const { date, edit, cyc } = wpop, d = wdOf(date), v = input.value.trim(), list = [...(week[d] || [])];
+  wpop.edit = null; wpop.draft = ''; wpop.cyc = '';   // 다음 줄은 다시 매주부터
+  if (edit >= 0 && !v) wpop.shifted = true;   // 지운 뒤라 줄 번호가 밀림 → 이번 클릭은 무시
+  if (edit < 0) { if (v) list.push(withCyc({ id: push(ref(db, 'x')).key, t: v }, cyc, date)); }
+  else if (!v) list.splice(edit, 1);
+  else if (v !== list[edit].t) list[edit] = { ...list[edit], t: v };
+  if (v || edit >= 0) saveWeekDay(d, list);
+  if (more && edit < 0 && v) wpop.edit = -1;
+  if (!later) renderWpop();
+}
+function wpopClick(e) {
+  wpDown = false;
+  if (!wpop) return;
+  if (wpop.shifted) { wpop.shifted = false; return renderWpop(); }
+  const t = e.target, row = t.closest('.wprow'), date = wpop.date, d = wdOf(date);
+  if (t.closest('.wcyc')) {
+    if (row.classList.contains('new')) { wpop.draft = row.querySelector('.win').value; wpop.cyc = nextCyc(date, wpop.cyc); return renderWpop(); }
+    const list = [...week[d]], i = +row.dataset.i;
+    list[i] = withCyc(list[i], nextCyc(date, list[i].r), date);
+    saveWeekDay(d, list); return renderWpop();
+  }
+  if (t.closest('.wdot') && row) {
+    const list = [...week[d]], i = +row.dataset.i;
+    list[i] = { ...list[i], c: WEEK_CATS[(WEEK_CATS.indexOf(weekCat(list[i])) + 1) % WEEK_CATS.length] };
+    saveWeekDay(d, list); return renderWpop();
+  }
+  if (t.closest('.wpadd')) { wpop.edit = -1; return renderWpop(); }
+  if (row && !row.classList.contains('editing')) { wpop.edit = +row.dataset.i; return renderWpop(); }
+  if (wpop.edit === null) renderWpop();   // 빈 곳 클릭: 저장 뒤 미뤄둔 화면 갱신
+}
+// 창 안에서 누르고 클릭 없이 끝나면(끌기 등) 미뤄둔 화면 갱신
+document.addEventListener('pointerup', () => setTimeout(() => { if (wpDown) { wpDown = false; renderWpop(); } }, 0));
+function wpopKey(e) {
+  if (!e.target.classList.contains('win') || e.isComposing) return;
+  if (e.key === 'Enter') { e.preventDefault(); wpopCommit(e.target, true); }
+  if (e.key === 'Escape') { e.stopPropagation(); if (wpop.edit === -1 && !e.target.value) return closePop(); wpop.edit = null; renderWpop(); }
 }
 
 /* ---------- 노트 (왼쪽, RAW 메모) → 메모 → 액션 아이템 ---------- */
@@ -603,15 +693,8 @@ app.addEventListener('click', e => {
   if (t.closest('#setBtn')) return setPop(t.closest('#setBtn'));
   if (t.closest('#noteBtn')) return setNoteOpen(!noteOn);
   if (t.closest('#weekBtn')) return setWeekOpen(!$('week').classList.contains('open'));
-  const wd = t.closest('#week .wday');
   if (t.closest('#week') && !$('week').classList.contains('open')) return setWeekOpen(true);   // 얇은 띠 누르면 펼침
-  if (wd) {
-    const r = t.closest('.wrow[data-i]');
-    if (t.closest('.wdot') && r) return cycleWeekCat(wd.dataset.d, +r.dataset.i);
-    if (r) return editWeek(wd.dataset.d, +r.dataset.i);
-    if (t.closest('.wadd')) return editWeek(wd.dataset.d, -1);
-    return;
-  }
+  if (t.closest('#week .wcell')) return openWpop(t.closest('.wcell'));   // 날짜 누르면 그날 업무 작은 창
   if (t.closest('#noteU')) return underlineNote();
   if (t.id === 'nameEnter') return enter($('nameInput').value);
   if (t.id === 'copyBtn') return copyReport();
@@ -621,7 +704,8 @@ app.addEventListener('click', e => {
   const li = t.closest('.item');
   if (!li) return;
   const it = byId(li.dataset.id); if (!it) return;
-  if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now(), ...(it.memo ? {} : { changed: Date.now() }) });   // 액션 아이템 완료/해제도 변경(빨강)
+  if (it.wk && !t.closest('.chk, .nocopy-dot')) return;   // 주간업무에서 온 것: 완료·복사 제외만
+  if (t.closest('.chk')) return patch(it.id, { done: !it.done, doneAt: it.done ? null : Date.now(), ...(it.memo || it.wk ? {} : { changed: Date.now() }) });   // 액션 아이템 완료/해제도 변경(빨강)
   if (t.closest('.mark')) return patch(it.id, { changed: it.changed ? null : Date.now() });   // 빨강 직접 켜기/끄기
   if (t.closest('.nocopy-dot')) return patch(it.id, { noCopy: it.noCopy ? null : true });   // 검은 점: 보고서 복사에서 제외
   if (t.closest('[data-a=del]')) return deleteItem(it);
@@ -636,11 +720,11 @@ app.addEventListener('change', e => {
 });
 app.addEventListener('dblclick', e => {
   const li = e.target.closest('.item');
-  if (li && !e.target.closest('.chk, .act, .mark, .nocopy-dot, input')) editRow(li);
+  if (li && !li.classList.contains('linked') && !e.target.closest('.chk, .act, .mark, .nocopy-dot, input')) editRow(li);
 });
 app.addEventListener('pointerdown', e => {
   const li = e.target.closest('.item');
-  if (li && e.button === 0 && !e.target.closest('.chk, .act, .mark, .nocopy-dot, input')) pressItem(e, li);
+  if (li && e.button === 0 && !li.classList.contains('linked') && !e.target.closest('.chk, .act, .mark, .nocopy-dot, input')) pressItem(e, li);
 });
 // 꾹 누른 뒤·드래그 중엔 화면 스크롤 막기 (폰)
 app.addEventListener('touchmove', e => { if (holding || dragging) e.preventDefault(); }, { passive: false });
@@ -651,13 +735,6 @@ app.addEventListener('input', e => {
 });
 app.addEventListener('focusout', e => {
   if (e.target.id === 'noteText' && noteT) saveNote();
-  if (e.target.classList.contains('win')) commitWeek(e.target, false);
-});
-// 주간업무 입력칸: Enter = 저장(새 줄이면 다음 줄 이어서), Esc = 취소
-app.addEventListener('keydown', e => {
-  if (!e.target.classList.contains('win') || e.isComposing) return;
-  if (e.key === 'Enter') { e.preventDefault(); commitWeek(e.target, true); }
-  if (e.key === 'Escape') { const d = weekEdit && weekEdit.d; weekEdit = null; if (d) renderWeekDay(d); }
 });
 // 밑줄 버튼을 눌러도 노트의 선택이 풀리지 않게
 app.addEventListener('pointerdown', e => { if (e.target.closest('#noteU')) e.preventDefault(); });
@@ -684,7 +761,7 @@ function onUndoKey(e) {
   const t = e.target;
   if (t.tagName === 'INPUT' && t.value !== '' && t.type !== 'date') return;
   if (t.isContentEditable) return;   // 노트: 글자 되돌리기
-  if (t.closest('#week')) return;   // 주간업무 입력칸: 글자 되돌리기
+  if (t.closest('.wpop')) return;   // 주간업무 입력칸: 글자 되돌리기
   e.preventDefault();
   undo();
 }
@@ -693,7 +770,7 @@ document.getElementById('unpin').onclick = () => pipWin && pipWin.close();
 
 // 자정이 지나면 "오늘" 기준 다시 계산
 let lastDay = today();
-setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); markWeekToday(); } }, 60000);
+setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); markWeekToday(); syncWeek(); } }, 60000);
 setInterval(expireRed, 60000);
 // 편집·드래그 중 미뤄둔 화면 갱신 처리
 setInterval(() => { if (pending && !busy) render(); }, 300);
